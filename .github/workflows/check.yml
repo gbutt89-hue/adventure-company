@@ -16,12 +16,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check JavaScript syntax
+      - name: Test game engine and syntax
+        run: npm test
+      - name: Build deployable site
+        run: npm run build
+      - name: Validate packaged PWA
         run: |
-          node --check engine.js
-          node --check game.js
-          node --check sw.js
-      - name: Validate manifest
-        run: node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8'))"
-      - name: Test seeded combat
-        run: node test-engine.js
+          test -f dist/index.html
+          test -f dist/sw.js
+          test -f dist/.openai/hosting.json
+          node -e "JSON.parse(require('fs').readFileSync('dist/manifest.webmanifest','utf8'))"
