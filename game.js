@@ -137,7 +137,7 @@
         return '<button class="'+(mobile?'':'nav-button ')+(state.view===x[0]?'active ':'')+(focus?'spotlight':'')+'" data-view="'+x[0]+'">'+x[1]+(mobile?'':'<small>'+x[2]+'</small>')+'</button>';
       }).join('');
     };
-    return {side:'<nav class="side-nav '+(state.tutorialFocus?'tutorial-nav ':'')+'" aria-label="Main navigation">'+make(false)+'</nav>',bottom:'<nav class="bottom-nav" aria-label="Mobile navigation">'+make(true)+'</nav>'};
+    return {side:'<nav class="side-nav '+(state.tutorialFocus?'tutorial-nav ':'')+'" aria-label="Main navigation">'+make(false)+'</nav>',bottom:'<nav class="bottom-nav '+(state.tutorialFocus?'tutorial-nav ':'')+'" aria-label="Mobile navigation">'+make(true)+'</nav>'};
   }
 
   function heading(kicker,title,copy){
