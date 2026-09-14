@@ -11,6 +11,18 @@
     orin: { name: 'Orin Vale', role: 'Acolyte', maxHealth: 30, attack: 7, armour: 1, speed: 11, damageType: 'magical', trait: 'Studious' }
   };
 
+  const TRAITS = {
+    Protective: '38% chance to intercept an attack aimed at an ally.',
+    'Eagle-eyed': '+7 percentage points to hit chance and critical-hit chance.',
+    Studious: 'Gains 25% more experience from expeditions.'
+  };
+
+  const ROLES = {
+    Vanguard: 'A durable physical fighter suited to armour, shields and protecting allies.',
+    Ranger: 'A fast physical attacker with greater accuracy and critical-hit chance.',
+    Acolyte: 'A magical attacker whose spells ignore Armour but consume Mana.'
+  };
+
   const ENEMIES = [
     { key: 'cutpurse', name: 'Road Cutpurse', maxHealth: 18, attack: 6, armour: 1, speed: 13 },
     { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 24, attack: 7, armour: 3, speed: 7 }
@@ -40,19 +52,58 @@
     return list[Math.floor(rng() * list.length)];
   }
 
+  function clamp(value, minimum, maximum) {
+    return Math.max(minimum, Math.min(maximum, Number(value)));
+  }
+
+  function readinessModifier(readiness) {
+    const value = clamp(readiness === undefined ? 100 : readiness, 0, 100);
+    if (value >= 70) return 1;
+    if (value >= 40) return 0.9;
+    return 0.8;
+  }
+
+  function effectiveStats(key, options) {
+    const hero = HEROES[key];
+    if (!hero) return null;
+    const settings = options || {};
+    const modifier = readinessModifier(settings.readiness);
+    const weaponBonus = key === 'elara' && settings.swordEquipped ? 4 : 0;
+    return {
+      attack: Math.max(1, Math.round((hero.attack + weaponBonus) * modifier)),
+      armour: hero.armour,
+      speed: Math.max(1, Math.round(hero.speed * modifier)),
+      readinessModifier: modifier
+    };
+  }
+
+  function experienceGain(key, baseExperience) {
+    return key === 'orin' ? Math.ceil(baseExperience * 1.25) : baseExperience;
+  }
+
   function simulateBattle(options) {
     const party = (options.party || []).filter(key => HEROES[key]);
     if (!party.length) return { success: false, invalid: true, log: [], heroes: {}, rounds: 0, potionUsed: false };
     const rng = randomFrom(options.seed);
     const sword = Boolean(options.swordEquipped);
+    const heroStates = options.heroStates || {};
     const includeLog = options.includeLog !== false;
     const log = [];
-    const heroUnits = party.map(key => ({
-      key, side: 'hero', name: HEROES[key].name, hp: HEROES[key].maxHealth,
-      maxHp: HEROES[key].maxHealth, attack: HEROES[key].attack + (key === 'elara' && sword ? 4 : 0),
-      armour: HEROES[key].armour, speed: HEROES[key].speed,
-      magical: HEROES[key].damageType === 'magical', potion: true
-    }));
+    const heroUnits = party.map(key => {
+      const condition = heroStates[key] || {};
+      const healthPercent = clamp(condition.health === undefined ? 100 : condition.health, 1, 100);
+      const mana = clamp(condition.mana === undefined ? 100 : condition.mana, 0, 100);
+      const readiness = clamp(condition.readiness === undefined ? 100 : condition.readiness, 0, 100);
+      const stats = effectiveStats(key, { readiness, swordEquipped: sword });
+      const hp = Math.max(1, Math.round(HEROES[key].maxHealth * healthPercent / 100));
+      return {
+        key, side: 'hero', name: HEROES[key].name, hp, startingHp: hp,
+        startingHealthPercent: Math.round(healthPercent), maxHp: HEROES[key].maxHealth,
+        attack: stats.attack, armour: stats.armour, speed: stats.speed,
+        readinessModifier: stats.readinessModifier, mana, startingMana: mana,
+        magical: HEROES[key].damageType === 'magical', potion: true
+      };
+    });
     const enemyUnits = ENEMIES.map(enemy => ({ ...enemy, side: 'enemy', hp: enemy.maxHealth }));
     const write = line => { if (includeLog) log.push(line); };
 
@@ -86,13 +137,25 @@
           }
           const critical = rng() < (actor.key === 'fen' ? 0.18 : 0.11);
           const variance = Math.floor(rng() * 4) - 1;
-          const base = actor.attack + variance + (critical ? Math.ceil(actor.attack * 0.7) : 0);
-          const damage = Math.max(1, base - (actor.magical ? 0 : target.armour));
+          let magical = actor.magical;
+          let attack = actor.attack;
+          let skill;
+          if (actor.key === 'orin' && actor.mana >= 7) {
+            actor.mana -= 7;
+            skill = pick(['Guiding Spark', 'Radiant Word', 'Searing Sign'], rng);
+          } else if (actor.key === 'orin') {
+            magical = false;
+            attack = Math.max(1, Math.round(4 * actor.readinessModifier));
+            skill = 'Staff Strike';
+          } else if (actor.key === 'elara') {
+            skill = pick(['Shield Bash', 'Measured Strike', 'Guarded Lunge'], rng);
+          } else {
+            skill = pick(['Quick Shot', 'Barbed Arrow', 'Deadeye Shot'], rng);
+          }
+          const base = attack + variance + (critical ? Math.ceil(attack * 0.7) : 0);
+          const damage = Math.max(1, base - (magical ? 0 : target.armour));
           target.hp = Math.max(0, target.hp - damage);
-          const skill = actor.key === 'elara' ? pick(['Shield Bash', 'Measured Strike', 'Guarded Lunge'], rng)
-            : actor.key === 'fen' ? pick(['Quick Shot', 'Barbed Arrow', 'Deadeye Shot'], rng)
-            : pick(['Guiding Spark', 'Radiant Word', 'Searing Sign'], rng);
-          write(actor.name + ' uses ' + skill + '. ' + target.name + ' takes ' + damage + (actor.magical ? ' magical' : '') + ' damage' + (critical ? ' — critical hit.' : '.'));
+          write(actor.name + ' uses ' + skill + '. ' + target.name + ' takes ' + damage + (magical ? ' magical' : '') + ' damage' + (critical ? ' — critical hit.' : '.'));
           if (target.hp === 0) write(target.name + ' falls.');
         } else {
           let targets = heroUnits.filter(unit => unit.hp > 0);
@@ -135,6 +198,10 @@
       heroResults[unit.key] = {
         remainingHealth: Math.max(1, unit.hp),
         healthPercent: Math.max(3, Math.round(unit.hp / unit.maxHp * 100)),
+        startingHealthPercent: unit.startingHealthPercent,
+        startingMana: unit.startingMana,
+        remainingMana: unit.mana,
+        manaSpent: unit.startingMana - unit.mana,
         injured: unit.hp <= 0,
         potionUsed: !unit.potion
       };
@@ -158,6 +225,7 @@
       const result = simulateBattle({
         party,
         swordEquipped: options.swordEquipped,
+        heroStates: options.heroStates,
         seed: String(options.seed) + '|forecast|' + i,
         includeLog: false
       });
@@ -180,5 +248,8 @@
     return [saveSeed, 'abandoned-road', runNumber, party.slice().sort().join(','), swordEquipped ? 'iron' : 'training'].join('|');
   }
 
-  return { HEROES, ENEMIES, hashSeed, randomFrom, simulateBattle, forecast, encounterSeed };
+  return {
+    HEROES, TRAITS, ROLES, ENEMIES, hashSeed, randomFrom, readinessModifier,
+    effectiveStats, experienceGain, simulateBattle, forecast, encounterSeed
+  };
 });
