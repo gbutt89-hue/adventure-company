@@ -1,0 +1,29 @@
+{
+  "name": "Adventure Company",
+  "short_name": "Adventure Co.",
+  "description": "Build a roster, prepare expeditions and turn recovered materials into better equipment.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#17201f",
+  "theme_color": "#17201f",
+  "orientation": "any",
+  "categories": [
+    "games",
+    "entertainment"
+  ],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
