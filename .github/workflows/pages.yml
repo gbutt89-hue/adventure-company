@@ -32,6 +32,8 @@ jobs:
           cp index.html styles.css engine.js game.js manifest.webmanifest sw.js icon.svg icon-maskable.svg robots.txt .nojekyll pages-dist/
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Upload public site
         uses: actions/upload-pages-artifact@v3
         with:
