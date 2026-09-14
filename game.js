@@ -137,7 +137,7 @@
         return '<button class="'+(mobile?'':'nav-button ')+(state.view===x[0]?'active ':'')+(focus?'spotlight':'')+'" data-view="'+x[0]+'">'+x[1]+(mobile?'':'<small>'+x[2]+'</small>')+'</button>';
       }).join('');
     };
-    return {side:'<nav class="side-nav" aria-label="Main navigation">'+make(false)+'</nav>',bottom:'<nav class="bottom-nav" aria-label="Mobile navigation">'+make(true)+'</nav>'};
+    return {side:'<nav class="side-nav '+(state.tutorialFocus?'tutorial-nav ':'')+'" aria-label="Main navigation">'+make(false)+'</nav>',bottom:'<nav class="bottom-nav" aria-label="Mobile navigation">'+make(true)+'</nav>'};
   }
 
   function heading(kicker,title,copy){
@@ -332,7 +332,7 @@
     var rewards=state.currentResult.rewards;
     state.resultClaimed=true;
     state.gold+=rewards.gold;state.scrap+=rewards.scrap;state.herbs+=rewards.herbs;
-    if(state.resultContext==='solo'){set({stage:'complete',currentResult:null});}
+    if(state.resultContext!=='first'){set({stage:'complete',currentResult:null});}
     else {
       var focus=state.tutorialSkipped?null:'workshop';
       set({stage:'workshop',view:'company',currentResult:null,tutorialFocus:focus});
@@ -346,7 +346,7 @@
       var selected=state.selected.indexOf(hero)>=0?state.selected.filter(function(x){return x!==hero;}):state.selected.concat(hero);
       set({selected:selected});
     }
-    if(action==='send')startExpedition(state.swordEquipped&&state.selected.length===1?'solo':'first',state.swordEquipped?25:45);
+    if(action==='send')startExpedition(state.swordEquipped?(state.selected.length===1?'solo':'repeat'):'first',state.swordEquipped?25:45);
     if(action==='claim')claimResult();
     if(action==='craft'&&!state.activities.craft&&state.gold>=15&&state.scrap>=3){
       state.gold-=15;state.scrap-=3;
