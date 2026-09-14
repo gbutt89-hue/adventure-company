@@ -12,8 +12,8 @@
   };
 
   const ENEMIES = [
-    { key: 'cutpurse', name: 'Road Cutpurse', maxHealth: 23, attack: 7, armour: 1, speed: 13 },
-    { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 30, attack: 9, armour: 3, speed: 7 }
+    { key: 'cutpurse', name: 'Road Cutpurse', maxHealth: 18, attack: 6, armour: 1, speed: 13 },
+    { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 24, attack: 7, armour: 3, speed: 7 }
   ];
 
   function hashSeed(text) {
