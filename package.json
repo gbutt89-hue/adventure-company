@@ -1,0 +1,13 @@
+{
+  "name": "adventure-company",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Seeded fantasy expedition company browser prototype",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --check engine.js && node --check game.js && node --check sw.js && node test-engine.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
