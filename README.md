@@ -51,4 +51,4 @@ A reproduced encounter uses exactly the same party, equipment and encounter seed
 - `sw.js`: offline asset cache
 - `test-engine.js`: deterministic engine checks
 - `build.mjs`: creates the deployable `dist` directory
-- `.openai/hosting.json`: links the existing private Sites project
+- `.github/workflows/pages.yml`: tests and deploys the public GitHub Pages build
