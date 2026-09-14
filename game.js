@@ -72,6 +72,18 @@
   }
   function forecast(){return E.forecast({party:state.selected,heroStates:state.heroes,seed:state.seed,swordEquipped:state.swordEquipped,samples:400});}
   function activityProgress(activity){return activity?Math.max(0,Math.min(100,(1-remaining(activity)/activity.duration)*100)):0;}
+  function updateLiveActivities(){
+    document.querySelectorAll('[data-countdown]').forEach(function(element){
+      var activity=state.activities[element.dataset.countdown];
+      if(activity)element.textContent=timeText(remaining(activity));
+    });
+    document.querySelectorAll('[data-activity-progress]').forEach(function(element){
+      var activity=state.activities[element.dataset.activityProgress];
+      if(activity)element.style.width=activityProgress(activity)+'%';
+    });
+    var recoveryNav=document.querySelector('[data-recovery-nav]');
+    if(recoveryNav&&state.activities.recovery)recoveryNav.textContent=E.HEROES[state.activities.recovery.hero].name.split(' ')[0]+' '+timeText(remaining(state.activities.recovery));
+  }
 
   function completeActivities() {
     var changed=false;
@@ -173,7 +185,7 @@
     var make=function(mobile){
       return items.map(function(x){
         var focus=state.tutorialFocus===x[0];
-        return '<button class="'+(mobile?'':'nav-button ')+(state.view===x[0]?'active ':'')+(focus?'spotlight':'')+'" data-view="'+x[0]+'">'+x[1]+(mobile?'':'<small>'+x[2]+'</small>')+'</button>';
+        return '<button class="'+(mobile?'':'nav-button ')+(state.view===x[0]?'active ':'')+(focus?'spotlight':'')+'" data-view="'+x[0]+'">'+x[1]+(mobile?'':'<small '+(x[0]==='recovery'?'data-recovery-nav':'')+'>'+x[2]+'</small>')+'</button>';
       }).join('');
     };
     return {side:'<nav class="side-nav '+(state.tutorialFocus?'tutorial-nav ':'')+'" aria-label="Main navigation">'+make(false)+'</nav>',bottom:'<nav class="bottom-nav '+(state.tutorialFocus?'tutorial-nav ':'')+'" aria-label="Mobile navigation">'+make(true)+'</nav>'};
@@ -217,8 +229,8 @@
     var activity=state.activities.expedition;
     if(!activity) return headquarters();
     return heading('Expedition under way','The party is on the road','The encounter was fixed by its seed when the party departed. You may safely close the game.')+
-      '<section class="panel timer-card"><div class="label">Time remaining</div><div class="timer">'+timeText(remaining(activity))+'</div>'+
-      '<div class="progress"><i style="width:'+activityProgress(activity)+'%"></i></div><div class="party-row">'+activity.party.map(function(k){return '<span class="portrait '+heroUi[k].colour+'" title="'+E.HEROES[k].name+'">'+heroUi[k].initials+'</span>';}).join('')+
+      '<section class="panel timer-card"><div class="label">Time remaining</div><div class="timer" data-countdown="expedition">'+timeText(remaining(activity))+'</div>'+
+      '<div class="progress"><i data-activity-progress="expedition" style="width:'+activityProgress(activity)+'%"></i></div><div class="party-row">'+activity.party.map(function(k){return '<span class="portrait '+heroUi[k].colour+'" title="'+E.HEROES[k].name+'">'+heroUi[k].initials+'</span>';}).join('')+
       '</div><p class="muted">Seed '+esc(activity.seed)+' · Combat resolves automatically.</p></section>';
   }
 
@@ -230,11 +242,12 @@
     var changes=r.changes||{};
     var party=Object.keys(changes);
     var averageLoss=party.length?party.reduce(function(total,key){return total+Math.max(0,changes[key].before.health-changes[key].after.health);},0)/party.length:0;
+    var maximumLoss=party.length?Math.max.apply(null,party.map(function(key){return Math.max(0,changes[key].before.health-changes[key].after.health);})):0;
     var injuries=party.filter(function(key){return r.heroes[key]&&r.heroes[key].injured;}).length;
     var verdict=!r.success?'The company limped home, but every name remains on the roster.':
       injuries?'The road exacted a heavy price. Everyone made it back.':
-      averageLoss<=10?'The company returned barely scuffed.':
-      averageLoss<=25?'A few bruises, but everyone walked home.':'A costly victory. The company will feel this one tomorrow.';
+      averageLoss<=10&&maximumLoss<=20?'The company returned barely scuffed.':
+      averageLoss<=25&&maximumLoss<=35?'A few bruises, but everyone walked home.':'A costly victory. The company will feel this one tomorrow.';
     var button=state.resultContext==='admin'?'<button class="primary" data-action="leave-replay">Return</button>':
       '<button class="primary" data-action="claim">'+(state.resultContext==='solo'?'Claim and finish prototype':'Take rewards')+'</button>';
     var consequences=party.map(function(key){
@@ -257,8 +270,8 @@
     var craft=state.activities.craft;
     var body;
     if(craft){
-      body='<div class="panel working"><div class="item-icon">⚔</div><h3>Forging Iron Sword</h3><div class="timer">'+timeText(remaining(craft))+'</div>'+
-        '<div class="progress"><i style="width:'+activityProgress(craft)+'%"></i></div><p class="muted">The timer continues while the game is closed.</p></div>';
+      body='<div class="panel working"><div class="item-icon">⚔</div><h3>Forging Iron Sword</h3><div class="timer" data-countdown="craft">'+timeText(remaining(craft))+'</div>'+
+        '<div class="progress"><i data-activity-progress="craft" style="width:'+activityProgress(craft)+'%"></i></div><p class="muted">The timer continues while the game is closed.</p></div>';
     } else if(state.swordCrafted&&!state.swordEquipped){
       body='<section class="panel recipe"><div class="item"><div class="item-icon">⚔</div><div><div class="label">Common weapon</div><h3>Iron Sword</h3></div></div>'+
         '<div class="equipment-change"><div><b>Worn Training Sword</b><span>Attack +0</span></div><span>→</span><div><b>Iron Sword</b><span>Attack +4 · Vanguard</span></div></div>'+
@@ -283,7 +296,7 @@
     var first;
     if(active){
       first='<article class="panel recovery-card violet recommended"><div class="label">Orin is away</div><h3>'+active.title+'</h3>'+
-        '<div class="timer small">'+timeText(remaining(active))+'</div><div class="progress"><i style="width:'+activityProgress(active)+'%"></i></div>'+
+        '<div class="timer small" data-countdown="recovery">'+timeText(remaining(active))+'</div><div class="progress"><i data-activity-progress="recovery" style="width:'+activityProgress(active)+'%"></i></div>'+
         '<p class="muted">Orin cannot be assigned elsewhere until this completes.</p><div class="recovery-projection"><div class="label">Expected on return</div>'+
         resultMeter('Mana',orin.mana,Math.min(100,orin.mana+40),'mana')+resultMeter('Readiness',orin.readiness,Math.min(100,orin.readiness+15),'ready')+
         '</div><button class="primary" disabled>In progress</button></article>';
@@ -481,6 +494,10 @@
     Promise.resolve(context.registerTool({name:'finish_current_prototype_timers',title:'Finish current timers',description:'Finish all active prototype expedition, crafting and recovery timers.',inputSchema:schema,annotations:{readOnlyHint:false,untrustedContentHint:false},execute:function(){Object.keys(state.activities).forEach(function(key){if(state.activities[key])state.activities[key].endsAt=Date.now();});completeActivities();render();return {finished:true,stage:state.stage};}})).catch(function(){});
   }
 
-  setInterval(function(){if(Object.values(state.activities).some(Boolean)){completeActivities();render();}},1000);
+  setInterval(function(){
+    if(!Object.values(state.activities).some(Boolean))return;
+    if(completeActivities())render();
+    else updateLiveActivities();
+  },1000);
   render();
 })();
