@@ -26,4 +26,4 @@ assert.ok(logs.size>1,'Different seeds should produce variable encounter logs');
 const tutorialSeed=E.encounterSeed('731942',1,['elara','fen','orin'],false);
 const tutorial=E.simulateBattle({party:['elara','fen','orin'],swordEquipped:false,seed:tutorialSeed,includeLog:true});
 assert.equal(tutorial.success,true,'The default opening party should complete the tutorial expedition');
-\nconsole.log('Adventure Company engine checks passed.');
+console.log('Adventure Company engine checks passed.');
