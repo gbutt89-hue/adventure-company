@@ -1,4 +1,4 @@
-const CACHE='adventure-company-v2';
+const CACHE='adventure-company-v2.1';
 const ASSETS=['./','./index.html','./styles.css','./engine.js','./game.js','./manifest.webmanifest','./icon.svg','./icon-maskable.svg'];
 
 self.addEventListener('install',event=>{

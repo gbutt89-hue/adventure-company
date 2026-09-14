@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.2
+## Prototype 0.2.1
 
 The current slice covers:
 
@@ -14,6 +14,9 @@ The current slice covers:
 - administrative seed, replay and timer controls
 - local save export and import
 - installable PWA and offline application shell
+- tap, keyboard and hover explanations for classes, traits and statistics
+- current-condition combat forecasting and per-hero consequence summaries
+- real Craft XP progression and guided recovery hand-offs
 
 The game is deliberately data-led and low-animation. The current goal is to validate the expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.
 
