@@ -1,5 +1,5 @@
 const CACHE='adventure-company-v2.1.1';
-const ASSETS=['./','./index.html','./styles.css','./engine.js','./game.js','./manifest.webmanifest','./icon.svg','./icon-maskable.svg'];
+const ASSETS=['./','./index.html','./styles.css?v=0.2.1','./engine.js?v=0.2.1','./game.js?v=0.2.1','./manifest.webmanifest','./icon.svg','./icon-maskable.svg'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
