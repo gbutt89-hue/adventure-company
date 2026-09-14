@@ -1,4 +1,4 @@
-const CACHE='adventure-company-v2.1';
+const CACHE='adventure-company-v2.1.1';
 const ASSETS=['./','./index.html','./styles.css','./engine.js','./game.js','./manifest.webmanifest','./icon.svg','./icon-maskable.svg'];
 
 self.addEventListener('install',event=>{
@@ -19,8 +19,8 @@ self.addEventListener('fetch',event=>{
     }).catch(()=>caches.match('./index.html')));
     return;
   }
-  event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request).then(response=>{
+  event.respondWith(fetch(event.request).then(response=>{
     if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));}
     return response;
-  })));
+  }).catch(()=>caches.match(event.request)));
 });
