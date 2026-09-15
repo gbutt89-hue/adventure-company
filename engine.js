@@ -27,10 +27,55 @@
     Skirmisher: 'Melee · Physical. A light-armoured attacker who relies on Speed and Evasion rather than Armour.'
   };
 
-  const ENEMIES = [
-    { key: 'cutpurse', name: 'Road Cutpurse', maxHealth: 18, attack: 6, armour: 1, speed: 13, accuracy: 88, evasion: 8 },
-    { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 24, attack: 7, armour: 3, speed: 7, accuracy: 88, evasion: 3 }
-  ];
+  const APPROACHES = {
+    careful: { name: 'Careful', duration: 1.35, enemyAttack: 0.9, reward: 0.9, materials: 1, readiness: 0.75, description: 'Longer, with lower Readiness use and less avoidable danger.' },
+    standard: { name: 'Standard', duration: 1, enemyAttack: 1, reward: 1, materials: 1, readiness: 1, description: 'Baseline duration, rewards and risk.' },
+    aggressive: { name: 'Aggressive', duration: 0.75, enemyAttack: 1.1, reward: 1.2, materials: 1.15, readiness: 1.25, description: 'Faster and more rewarding, with greater injury and Readiness risk.' },
+    scavenge: { name: 'Scavenge', duration: 1.4, enemyAttack: 1.05, reward: 1, materials: 1.55, readiness: 1.15, description: 'Longer and more exposed, with better material opportunities.' }
+  };
+
+  const ENCOUNTERS = {
+    'abandoned-road': {
+      key: 'abandoned-road', name: 'Abandoned Road', region: 'North Road', level: 1, duration: 25,
+      description: 'Merchants report bandits and strange lights along the old north road. Clear the obstruction and recover anything useful.',
+      tags: ['Physical threats', 'Bandits'], rewardLabel: ['14–21 gold', '3–4 scrap', 'Possible herb', 'Combat XP'],
+      rewards: { gold: [14, 21], scrap: [3, 4], herbs: [0, 1], herbChance: 0.55, xp: 20 },
+      opening: ['Fen notices fresh boot prints circling the overturned cart.', 'A snapped axle blocks the road. Two figures rise from the ditch.', 'The company finds the merchants’ cart stripped and abandoned.', 'A warning arrow strikes the earth at Elara’s feet.'],
+      victory: ['The surviving bandits flee. The company searches the wreckage.', 'The road falls quiet. A careful search reveals usable supplies.', 'The last threat is driven off and the merchants’ route is secure.'],
+      enemies: [
+        { key: 'cutpurse', name: 'Road Cutpurse', maxHealth: 18, attack: 6, armour: 1, ward: 0, speed: 13, accuracy: 88, evasion: 8, damageType: 'physical' },
+        { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 24, attack: 7, armour: 3, ward: 0, speed: 7, accuracy: 88, evasion: 3, damageType: 'physical' }
+      ],
+      favoured: [{ stat: 'armour', minimum: 5, reason: 'High Armour reduces the road bandits’ physical damage.' }]
+    },
+    'briar-den': {
+      key: 'briar-den', name: 'Briar Den', region: 'Greenward', level: 2, duration: 32,
+      description: 'Something has driven the briar wolves onto the herb-gatherers’ paths. Thin the pack and search the den.',
+      tags: ['Evasive beasts', 'Herb source'], rewardLabel: ['12–18 gold', '1–2 scrap', '1–3 herbs', 'Combat XP'],
+      rewards: { gold: [12, 18], scrap: [1, 2], herbs: [1, 3], xp: 24 },
+      opening: ['Yellow eyes track the company through the briars.', 'A low growl passes between the thorn-choked trees.', 'The herbalists’ baskets lie scattered beside fresh paw prints.'],
+      victory: ['The pack scatters, leaving the herb beds accessible once more.', 'The den falls quiet. Useful herbs grow thick beneath the thorns.'],
+      enemies: [
+        { key: 'briar-wolf', name: 'Briar Wolf', maxHealth: 17, attack: 7, armour: 1, ward: 1, speed: 16, accuracy: 69, evasion: 22, damageType: 'physical', armourPiercing: 5 },
+        { key: 'thorn-alpha', name: 'Thorn Alpha', maxHealth: 21, attack: 8, armour: 2, ward: 1, speed: 12, accuracy: 71, evasion: 17, damageType: 'physical', armourPiercing: 5 }
+      ],
+      favoured: [{ stat: 'accuracy', minimum: 89, reason: 'High Accuracy helps connect against the den’s evasive beasts.' }]
+    },
+    'cinder-watch': {
+      key: 'cinder-watch', name: 'Cinder Watch', region: 'Old March', level: 3, duration: 40,
+      description: 'Embers move inside a ruined watchtower where no fire has burned for years. Investigate the disturbance.',
+      tags: ['Magical threats', 'Fire damage'], rewardLabel: ['18–26 gold', '2–4 scrap', 'Possible herb', 'Combat XP'],
+      rewards: { gold: [18, 26], scrap: [2, 4], herbs: [0, 1], herbChance: 0.35, xp: 30 },
+      opening: ['Ash lifts from the floor and gathers into hostile shapes.', 'The old brazier flares as the company enters the watchtower.', 'Heat shimmers around figures formed from soot and ember.'],
+      victory: ['The last ember gutters out, leaving strange metal among the ashes.', 'Cool air returns to the tower. The company searches the scorched chamber.'],
+      enemies: [
+        { key: 'ash-wisp', name: 'Ash Wisp', maxHealth: 19, attack: 7, armour: 0, ward: 0, speed: 15, accuracy: 90, evasion: 12, damageType: 'magical', fire: true },
+        { key: 'cinder-guard', name: 'Cinder Guard', maxHealth: 27, attack: 8, armour: 3, ward: 1, speed: 8, accuracy: 88, evasion: 5, damageType: 'magical', fire: true }
+      ],
+      favoured: [{ stat: 'fire', minimum: 20, reason: 'Fire Resistance reduces the watch’s fire-tagged magical damage.' }, { stat: 'ward', minimum: 6, reason: 'High Ward reduces the watch’s magical attacks.' }]
+    }
+  };
+  const ENEMIES = ENCOUNTERS['abandoned-road'].enemies;
 
   function hashSeed(text) {
     let h = 2166136261 >>> 0;
@@ -96,6 +141,8 @@
   function simulateBattle(options) {
     const party = (options.party || []).filter(key => HEROES[key]);
     if (!party.length) return { success: false, invalid: true, log: [], heroes: {}, rounds: 0, potionUsed: false };
+    const encounter = ENCOUNTERS[options.encounterKey] || ENCOUNTERS['abandoned-road'];
+    const approach = APPROACHES[options.approach] || APPROACHES.standard;
     const rng = randomFrom(options.seed);
     const sword = Boolean(options.swordEquipped);
     const equipmentAttack = options.equipmentAttack || {};
@@ -118,15 +165,10 @@
         magical: HEROES[key].damageType === 'magical', potion: true
       };
     });
-    const enemyUnits = ENEMIES.map(enemy => ({ ...enemy, side: 'enemy', hp: enemy.maxHealth }));
+    const enemyUnits = encounter.enemies.map(enemy => ({ ...enemy, attack: Math.max(1, Math.round(enemy.attack * approach.enemyAttack)), side: 'enemy', hp: enemy.maxHealth }));
     const write = line => { if (includeLog) log.push(line); };
 
-    write(pick([
-      'Fen notices fresh boot prints circling the overturned cart.',
-      'A snapped axle blocks the road. Two figures rise from the ditch.',
-      'The company finds the merchants’ cart stripped and abandoned.',
-      'A warning arrow strikes the earth at Elara’s feet.'
-    ], rng));
+    write(pick(encounter.opening, rng));
 
     let round = 0;
     while (round < 10 && heroUnits.some(unit => unit.hp > 0) && enemyUnits.some(unit => unit.hp > 0)) {
@@ -169,7 +211,7 @@
             skill = pick(['Quick Shot', 'Barbed Arrow', 'Deadeye Shot'], rng);
           }
           const base = attack + variance + (critical ? Math.ceil(attack * 0.7) : 0);
-          const damage = Math.max(1, base - (magical ? 0 : target.armour));
+          const damage = Math.max(1, base - (magical ? (target.ward || 0) : target.armour));
           target.hp = Math.max(0, target.hp - damage);
           write(actor.name + ' uses ' + skill + '. ' + target.name + ' takes ' + damage + (magical ? ' magical' : '') + ' damage' + (critical ? ' — critical hit.' : '.'));
           if (target.hp === 0) write(target.name + ' falls.');
@@ -189,9 +231,12 @@
           }
           const critical = rng() < 0.1;
           const base = actor.attack + Math.floor(rng() * 4) + (critical ? 4 : 0);
-          const damage = Math.max(1, base - target.armour);
+          const mitigation = actor.damageType === 'magical' ? target.ward : Math.max(0, target.armour - (actor.armourPiercing || 0));
+          let damage = Math.max(1, base - mitigation);
+          if (actor.fire) damage = Math.max(1, Math.round(damage * (1 - (HEROES[target.key].resistances.fire || 0) / 100)));
           target.hp = Math.max(0, target.hp - damage);
-          write(actor.name + ' hits ' + target.name + ' for ' + damage + ' damage' + (critical ? ' — a vicious blow.' : '.'));
+          const damageLabel = actor.fire ? ' fire damage' : actor.damageType === 'magical' ? ' magical damage' : ' damage';
+          write(actor.name + ' hits ' + target.name + ' for ' + damage + damageLabel + (critical ? ' — a vicious blow.' : '.'));
           if (target.hp === 0) write(target.name + ' is overwhelmed and will return injured.');
           if (target.hp > 0 && target.hp / target.maxHp <= 0.34 && target.potion) {
             const restored = Math.min(12, target.maxHp - target.hp);
@@ -204,11 +249,7 @@
     }
 
     const success = !enemyUnits.some(unit => unit.hp > 0);
-    write(success ? pick([
-      'The surviving bandits flee. The company searches the wreckage.',
-      'The road falls quiet. A careful search reveals usable supplies.',
-      'The last threat is driven off and the merchants’ route is secure.'
-    ], rng) : 'The company withdraws. Its fallen heroes return injured rather than dead.');
+    write(success ? pick(encounter.victory, rng) : 'The company withdraws. Its fallen heroes return injured rather than dead.');
 
     const heroResults = {};
     heroUnits.forEach(unit => {
@@ -224,10 +265,19 @@
       };
     });
 
+    const rewards = encounter.rewards;
+    const rollRange = range => range[0] + Math.floor(rng() * (range[1] - range[0] + 1));
+    const baseHerbs = rewards.herbChance !== undefined ? (rng() < rewards.herbChance ? rewards.herbs[1] : rewards.herbs[0]) : rollRange(rewards.herbs);
     return {
       success, invalid: false, log, heroes: heroResults, rounds: round,
       potionUsed: heroUnits.some(unit => !unit.potion),
-      rewards: success ? { gold: 14 + Math.floor(rng() * 8), scrap: 3 + Math.floor(rng() * 2), herbs: rng() < 0.55 ? 1 : 0, xp: 20 + round } : { gold: 0, scrap: 0, herbs: 0, xp: 8 }
+      encounterKey: encounter.key, approach: options.approach || 'standard',
+      rewards: success ? {
+        gold: Math.max(1, Math.round(rollRange(rewards.gold) * approach.reward)),
+        scrap: Math.max(0, Math.round(rollRange(rewards.scrap) * approach.materials)),
+        herbs: Math.max(0, Math.round(baseHerbs * approach.materials)),
+        xp: Math.max(1, Math.round((rewards.xp + round) * approach.reward))
+      } : { gold: 0, scrap: 0, herbs: 0, xp: Math.max(8, Math.round(rewards.xp * 0.35)) }
     };
   }
 
@@ -245,6 +295,8 @@
         swordEquipped: options.swordEquipped,
         equipmentAttack: options.equipmentAttack,
         heroStates: options.heroStates,
+        encounterKey: options.encounterKey,
+        approach: options.approach,
         seed: String(options.seed) + '|forecast|' + i,
         includeLog: false
       });
@@ -265,13 +317,21 @@
     };
   }
 
-  function encounterSeed(saveSeed, runNumber, party, swordEquipped) {
+  function encounterSeed(saveSeed, runNumber, party, swordEquipped, encounterKey, approach) {
     const equipment = typeof swordEquipped === 'string' ? swordEquipped : swordEquipped ? 'iron' : 'training';
-    return [saveSeed, 'abandoned-road', runNumber, party.slice().sort().join(','), equipment].join('|');
+    return [saveSeed, encounterKey || 'abandoned-road', runNumber, party.slice().sort().join(','), equipment, approach || 'standard'].join('|');
+  }
+
+  function heroAdvantages(key, encounterKey) {
+    const hero = HEROES[key];
+    const encounter = ENCOUNTERS[encounterKey];
+    if (!hero || !encounter) return [];
+    const stats = Object.assign({}, hero, { fire: hero.resistances.fire || 0 });
+    return encounter.favoured.filter(rule => Number(stats[rule.stat]) >= rule.minimum).map(rule => rule.reason);
   }
 
   return {
-    HEROES, TRAITS, ROLES, ENEMIES, hashSeed, randomFrom, readinessModifier,
-    effectiveStats, experienceGain, simulateBattle, forecast, encounterSeed, hasTrait
+    HEROES, TRAITS, ROLES, ENEMIES, ENCOUNTERS, APPROACHES, hashSeed, randomFrom, readinessModifier,
+    effectiveStats, experienceGain, simulateBattle, forecast, encounterSeed, heroAdvantages, hasTrait
   };
 });

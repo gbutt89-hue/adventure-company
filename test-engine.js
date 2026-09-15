@@ -54,6 +54,15 @@ for(let i=0;i<12;i+=1){
 }
 assert.ok(logs.size>1,'Different seeds should produce variable encounter logs');
 
+assert.deepEqual(Object.keys(E.APPROACHES),['careful','standard','aggressive','scavenge'],'The four agreed expedition approaches must remain available');
+assert.deepEqual(Object.keys(E.ENCOUNTERS),['abandoned-road','briar-den','cinder-watch'],'The expedition foundation should expose three distinct locations');
+assert.ok(E.heroAdvantages('elara','abandoned-road').length>0,'Elara’s Armour should favour her on the physical road');
+assert.ok(E.heroAdvantages('fen','briar-den').length>0,'Fen’s Accuracy should favour him against evasive beasts');
+assert.ok(E.heroAdvantages('orin','cinder-watch').length>0,'Orin’s Ward and Fire Resistance should favour him at Cinder Watch');
+const carefulForecast=E.forecast({party:['elara'],encounterKey:'abandoned-road',approach:'careful',seed:'approach-test',samples:400});
+const aggressiveForecast=E.forecast({party:['elara'],encounterKey:'abandoned-road',approach:'aggressive',seed:'approach-test',samples:400});
+assert.ok(carefulForecast.danger<=aggressiveForecast.danger,'Careful must not be more dangerous than Aggressive for identical inputs');
+
 const tutorialSeed=E.encounterSeed('731942',1,['elara','fen','orin'],false);
 const tutorial=E.simulateBattle({party:['elara','fen','orin'],heroStates:fullCondition,swordEquipped:false,seed:tutorialSeed,includeLog:true});
 assert.equal(tutorial.success,true,'The default opening party should complete the tutorial expedition');

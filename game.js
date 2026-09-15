@@ -67,16 +67,16 @@
 
   function fresh() {
     return {
-      saveVersion: 4, stage: 'intro', view: 'town', expeditionScreen: 'list', activeBuilding: null,
+      saveVersion: 5, stage: 'intro', view: 'town', expeditionScreen: 'list', activeBuilding: null,
       companyName: '', gold: 20, scrap: 0, herbs: 0, seed: '731942', runNumber: 0,
-      selectedParty: ['elara', 'fen', 'orin'], selectedHero: 'elara', firstExpeditionComplete: false,
+      selectedParty: ['elara', 'fen', 'orin'], selectedHero: 'elara', selectedExpedition: 'abandoned-road', selectedApproach: 'standard', firstExpeditionComplete: false,
       tutorial: 'town-expeditions', tutorialSkipped: false, rosterOpen: false, devOpen: false, notice: null,
-      currentResult: null, lastResult: null, resultContext: null, resultClaimed: false,
+      currentResult: null, lastResult: null, resultContext: null, resultClaimed: false, expeditionResults: {}, completedExpeditions: {},
       selectedInventoryItem: null, equipmentSlot: null, showIncompatibleItems: false, pendingDismantleId: null, completedActivity: null,
       inventoryCapacity: DEFAULT_INVENTORY_CAPACITY, workshopOutput: null,
       craftXp: 0, lastCraftXpGain: 0, nextItemId: 1, inventory: [],
       equipment: { elara: emptyEquipment(), fen: emptyEquipment(), orin: emptyEquipment(), sable: emptyEquipment() },
-      activities: { expedition: null, craft: null, facilities: emptyFacilities() },
+      activities: { expeditions: {}, craft: null, facilities: emptyFacilities() },
       heroes: {
         elara: { health: 100, mana: 0, readiness: 100, xp: 0 },
         fen: { health: 100, mana: 0, readiness: 100, xp: 0 },
@@ -98,14 +98,14 @@
     if (old.swordEquipped) next.equipment.elara.mainHand = ironSword('legacy-iron-sword');
     else if (old.swordCrafted) next.inventory.push(ironSword('legacy-iron-sword'));
     if (old.activities) {
-      next.activities.expedition = old.activities.expedition || null;
+      if (old.activities.expedition) next.activities.expeditions['abandoned-road'] = old.activities.expedition;
       next.activities.craft = old.activities.craft || null;
       if (old.activities.recovery) next.activities.facilities.tavern[0] = old.activities.recovery;
     }
     if (old.currentResult) next.currentResult = old.currentResult;
     if (old.lastResult) next.lastResult = old.lastResult;
     if (old.stage === 'results') { next.view = 'expeditions'; next.expeditionScreen = 'results'; }
-    else if (next.activities.expedition) { next.view = 'expeditions'; next.expeditionScreen = 'active'; }
+    else if (Object.keys(next.activities.expeditions).length) { next.view = 'expeditions'; next.expeditionScreen = 'list'; }
     next.tutorial = next.tutorialSkipped ? null : (next.firstExpeditionComplete ? null : 'town-expeditions');
     return next;
   }
@@ -113,11 +113,26 @@
   function normalise(value) {
     var base = fresh();
     var next = Object.assign(base, value || {});
-    next.saveVersion = 4;
+    next.saveVersion = 5;
     next.heroes = Object.assign(base.heroes, next.heroes || {});
     next.equipment = Object.assign(base.equipment, next.equipment || {});
     Object.keys(E.HEROES).forEach(function (key) { next.equipment[key] = Object.assign(emptyEquipment(), next.equipment[key] || {}); });
     next.activities = Object.assign(base.activities, next.activities || {});
+    next.activities.expeditions = Object.assign({}, next.activities.expeditions || {});
+    if (next.activities.expedition) {
+      next.activities.expeditions['abandoned-road'] = next.activities.expedition;
+      delete next.activities.expedition;
+    }
+    Object.keys(next.activities.expeditions).forEach(function (key) {
+      if (!E.ENCOUNTERS[key]) { delete next.activities.expeditions[key]; return; }
+      next.activities.expeditions[key] = Object.assign({ encounterKey: key, title: E.ENCOUNTERS[key].name, approach: 'standard' }, next.activities.expeditions[key]);
+    });
+    next.expeditionResults = Object.assign({}, next.expeditionResults || {});
+    next.completedExpeditions = Object.assign({}, next.completedExpeditions || {});
+    if (next.currentResult && next.resultContext !== 'admin' && next.expeditionScreen === 'results' && !next.expeditionResults['abandoned-road']) {
+      next.expeditionResults['abandoned-road'] = next.currentResult;
+      next.currentResult = null;
+    }
     next.activities.facilities = Object.assign(emptyFacilities(), next.activities.facilities || {});
     Object.keys(emptyFacilities()).forEach(function (key) {
       var required = FACILITIES[key].slots;
@@ -141,6 +156,8 @@
     });
     next.selectedParty = (Array.isArray(next.selectedParty) ? next.selectedParty : ['elara', 'fen', 'orin']).filter(function (key, index, list) { return E.HEROES[key] && list.indexOf(key) === index; }).slice(0, 3);
     if (!E.HEROES[next.selectedHero]) next.selectedHero = 'elara';
+    if (!E.ENCOUNTERS[next.selectedExpedition]) next.selectedExpedition = 'abandoned-road';
+    if (!E.APPROACHES[next.selectedApproach]) next.selectedApproach = 'standard';
     return next;
   }
 
@@ -167,7 +184,7 @@
 
   function normaliseItem(item) {
     if (!item) return item;
-    if (item.key === 'iron-sword') return Object.assign(ironSword(item.id), item, { allowedRoles: item.allowedRoles || ['Vanguard', 'Ranger', 'Skirmisher'] });
+    if (item.key === 'iron-sword') return Object.assign(ironSword(item.id), item, { allowedRoles: ['Vanguard', 'Ranger', 'Skirmisher'] });
     return item;
   }
 
@@ -197,9 +214,19 @@
     return list;
   }
 
+  function allExpeditionActivities() {
+    return Object.keys(state.activities.expeditions).map(function (key) { return { key: key, activity: state.activities.expeditions[key] }; }).filter(function (entry) { return Boolean(entry.activity); });
+  }
+
+  function expeditionUnlocked(key) {
+    if (key === 'abandoned-road') return true;
+    if (key === 'briar-den') return state.firstExpeditionComplete;
+    return Number(state.completedExpeditions['briar-den'] || 0) > 0;
+  }
+
   function heroActivity(key) {
-    var expedition = state.activities.expedition;
-    if (expedition && expedition.party.indexOf(key) >= 0) return { title: 'Abandoned Road', remaining: remaining(expedition) };
+    var expedition = allExpeditionActivities().find(function (entry) { return entry.activity.party.indexOf(key) >= 0; });
+    if (expedition) return { title: E.ENCOUNTERS[expedition.key].name, remaining: remaining(expedition.activity) };
     var found = allFacilityActivities().find(function (entry) { return entry.activity.hero === key; });
     return found ? { title: FACILITIES[found.facility].shortName, remaining: remaining(found.activity) } : null;
   }
@@ -207,16 +234,17 @@
   function heroBusy(key) { return Boolean(heroActivity(key)); }
 
   function forecast() {
-    return E.forecast({ party: state.selectedParty, heroStates: state.heroes, seed: state.seed, equipmentAttack: equipmentAttack(), samples: 400 });
+    return E.forecast({ party: state.selectedParty, heroStates: state.heroes, seed: state.seed, equipmentAttack: equipmentAttack(), encounterKey: state.selectedExpedition, approach: state.selectedApproach, samples: 400 });
   }
 
   function completeActivities() {
     var changed = false;
     var now = Date.now();
-    var expedition = state.activities.expedition;
-    if (expedition && expedition.endsAt <= now) {
+    allExpeditionActivities().forEach(function (entry) {
+      var expeditionKey = entry.key, expedition = entry.activity;
+      if (expedition.endsAt > now) return;
       var beforeStates = expedition.heroStates || state.heroes;
-      var result = E.simulateBattle({ party: expedition.party, heroStates: beforeStates, swordEquipped: expedition.swordEquipped, equipmentAttack: expedition.equipmentAttack, seed: expedition.seed, includeLog: true });
+      var result = E.simulateBattle({ party: expedition.party, heroStates: beforeStates, equipmentAttack: expedition.equipmentAttack, seed: expedition.seed, encounterKey: expeditionKey, approach: expedition.approach, includeLog: true });
       if (expedition.context === 'first') result.rewards.scrap = Math.max(3, result.rewards.scrap);
       result.changes = {};
       expedition.party.forEach(function (key) {
@@ -224,23 +252,22 @@
         var before = Object.assign({}, beforeStates[key]);
         var hero = Object.assign({}, state.heroes[key]);
         hero.health = outcome.healthPercent;
-        hero.readiness = Math.max(0, hero.readiness - (18 + result.rounds * 2));
+        var readinessScale = (E.APPROACHES[expedition.approach] || E.APPROACHES.standard).readiness;
+        hero.readiness = Math.max(0, hero.readiness - Math.round((18 + result.rounds * 2) * readinessScale));
         hero.mana = outcome.remainingMana;
         var xpGain = E.experienceGain(key, result.rewards.xp);
         hero.xp += xpGain;
         result.changes[key] = { before: before, after: { health: hero.health, mana: hero.mana, readiness: hero.readiness, xp: hero.xp }, xpGain: xpGain };
         state.heroes[key] = hero;
       });
-      state.currentResult = result;
-      state.lastResult = { inputs: { party: expedition.party, swordEquipped: expedition.swordEquipped, equipmentAttack: expedition.equipmentAttack, seed: expedition.seed }, result: result };
-      state.resultContext = expedition.context;
-      state.resultClaimed = false;
-      state.activities.expedition = null;
-      state.view = 'expeditions';
-      state.expeditionScreen = 'results';
-      if (!state.tutorialSkipped && expedition.context === 'first') state.tutorial = 'claim-rewards';
+      state.expeditionResults[expeditionKey] = result;
+      state.lastResult = { inputs: { party: expedition.party, heroStates: beforeStates, equipmentAttack: expedition.equipmentAttack, seed: expedition.seed, encounterKey: expeditionKey, approach: expedition.approach }, result: result };
+      delete state.activities.expeditions[expeditionKey];
+      if (!state.tutorialSkipped && expedition.context === 'first') {
+        state.view = 'expeditions'; state.selectedExpedition = expeditionKey; state.expeditionScreen = 'results'; state.tutorial = 'claim-rewards';
+      } else state.notice = E.ENCOUNTERS[expeditionKey].name + ' is complete. Its outcome is ready to review.';
       changed = true;
-    }
+    });
     var craft = state.activities.craft;
     if (craft && craft.endsAt <= now) {
       state.activities.craft = null;
@@ -279,7 +306,7 @@
   function updateLiveActivities() {
     document.querySelectorAll('[data-countdown-key]').forEach(function (element) {
       var key = element.dataset.countdownKey;
-      var activity = key === 'expedition' ? state.activities.expedition : key === 'craft' ? state.activities.craft : null;
+      var activity = key.indexOf('expedition:') === 0 ? state.activities.expeditions[key.split(':')[1]] : key === 'craft' ? state.activities.craft : null;
       if (activity) element.textContent = timeText(remaining(activity));
     });
     document.querySelectorAll('[data-facility-countdown]').forEach(function (element) {
@@ -289,7 +316,7 @@
     });
     document.querySelectorAll('[data-progress-key]').forEach(function (element) {
       var key = element.dataset.progressKey;
-      var activity = key === 'expedition' ? state.activities.expedition : state.activities.craft;
+      var activity = key.indexOf('expedition:') === 0 ? state.activities.expeditions[key.split(':')[1]] : state.activities.craft;
       if (activity) element.style.width = activityProgress(activity) + '%';
     });
     document.querySelectorAll('[data-hero-timer]').forEach(function (element) {
@@ -302,7 +329,7 @@
     });
     document.querySelectorAll('[data-activity-countdown]').forEach(function (element) {
       var activityKey = element.dataset.activityCountdown;
-      var activeActivity = activityKey === 'expedition' ? state.activities.expedition : state.activities.craft;
+      var activeActivity = activityKey.indexOf('expedition:') === 0 ? state.activities.expeditions[activityKey.split(':')[1]] : state.activities.craft;
       if (activeActivity) element.textContent = timeText(remaining(activeActivity));
     });
   }
@@ -323,7 +350,7 @@
   function miniMeter(label, value, maximum, kind, symbol) {
     var max = maximum || 100;
     var width = max ? Math.max(0, Math.min(100, value / max * 100)) : 0;
-    return '<span class="mini-meter ' + kind + '" role="meter" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i><em style="width:' + width + '%"></em></i></span>';
+    return '<span class="mini-meter ' + kind + '" role="meter" data-meter-value="' + esc(label + ': ' + value + ' / ' + max) + '" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i><em style="width:' + width + '%"></em></i></span>';
   }
 
   function conditionMeters(key, compact) {
@@ -331,13 +358,19 @@
     var healthNow = Math.max(1, Math.round(hero.maxHealth * condition.health / 100));
     var values = [miniMeter('Health', healthNow, hero.maxHealth, 'health', '♥')];
     if (hero.maxMana) values.push(miniMeter('Mana', condition.mana, hero.maxMana, 'mana', '◆'));
-    if (!compact) values.push(miniMeter('Readiness', condition.readiness, 100, 'ready', '●'));
+    values.push(miniMeter('Readiness', condition.readiness, 100, 'ready', '●'));
     values.push(miniMeter('Experience', xpWithinLevel(condition), 100, 'xp', '✦'));
     return '<span class="mini-meters">' + values.join('') + '</span>';
   }
 
   function traitTerms(key) {
     return E.HEROES[key].traits.map(function (trait) { return infoTerm(trait, E.TRAITS[trait]); }).join('');
+  }
+
+  function favouredBadge(key) {
+    var reasons = E.heroAdvantages(key, state.selectedExpedition);
+    if (!reasons.length) return '';
+    return '<span class="favoured-badge" tabindex="0" aria-label="Favoured: ' + esc(reasons.join(' ')) + '"><b>↑</b> Favoured<span class="favoured-popover" role="tooltip">' + esc(reasons.join(' ')) + '</span></span>';
   }
 
   function heroIdentity(key, plain) {
@@ -356,7 +389,7 @@
     return '<article class="party-hero-card ' + (chosen && options.selectable ? 'selected ' : '') + (busy ? 'busy ' : '') + '">' +
       '<div class="hero-card-head"><span class="portrait ' + ui.colour + '">' + ui.initials + '</span>' + heroIdentity(key, false) +
       (options.selectable ? '<button class="party-remove" type="button" data-action="toggle-party" data-hero="' + key + '" aria-label="Remove ' + esc(hero.name) + ' from party">×</button>' : '') + '</div>' +
-      '<div class="combat-line"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical damage' : 'Physical damage') + '</span></div>' +
+      '<div class="combat-line"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical damage' : 'Physical damage') + '</span>' + favouredBadge(key) + '</div>' +
       '<div class="party-traits"><span class="label">Traits</span>' + traitTerms(key) + '</div>' +
       conditionMeters(key, false) +
       (activity ? '<div class="away-label" data-hero-timer="' + key + '">' + activity.title + ' ' + timeText(activity.remaining) + '</div>' : '') + '</article>';
@@ -368,7 +401,7 @@
 
   function rosterChoice(key) {
     var hero = E.HEROES[key], ui = HERO_UI[key], selected = state.selectedParty.indexOf(key) >= 0, busy = heroBusy(key), activity = heroActivity(key);
-    return '<button class="roster-choice ' + (selected ? 'selected ' : '') + (busy ? 'busy' : '') + '" data-action="toggle-party" data-hero="' + key + '" aria-pressed="' + selected + '" ' + (busy ? 'disabled' : '') + '><span class="portrait small ' + ui.colour + '">' + ui.initials + '</span><span><strong>' + esc(hero.name) + '</strong><em>' + esc(hero.role) + ' · Level ' + heroLevel(state.heroes[key]) + '</em><small>' + (activity ? activity.title + ' ' + timeText(activity.remaining) : selected ? 'In company' : 'Available') + '</small></span></button>';
+    return '<button class="roster-choice ' + (selected ? 'selected ' : '') + (busy ? 'busy' : '') + '" data-action="toggle-party" data-hero="' + key + '" aria-pressed="' + selected + '" ' + (busy ? 'disabled' : '') + '><span class="portrait small ' + ui.colour + '">' + ui.initials + '</span><span><strong>' + esc(hero.name) + '</strong><em>' + esc(hero.role) + ' · Level ' + heroLevel(state.heroes[key]) + '</em><small>' + (activity ? activity.title + ' ' + timeText(activity.remaining) : selected ? 'In company' : 'Available') + '</small>' + favouredBadge(key) + '</span></button>';
   }
 
   function heroRail() {
@@ -376,14 +409,15 @@
       Object.keys(E.HEROES).map(function (key) {
         var hero = E.HEROES[key], ui = HERO_UI[key], condition = state.heroes[key], busy = heroBusy(key), activity = heroActivity(key);
         return '<button class="rail-hero ' + (state.selectedHero === key ? 'selected ' : '') + (busy ? 'busy' : '') + '" data-action="select-hero" data-hero="' + key + '" draggable="' + (!busy) + '" data-draggable-hero="' + key + '">' +
-          '<span class="portrait ' + ui.colour + '">' + ui.initials + '</span><span class="rail-copy"><strong>' + esc(hero.name) + '</strong><span>' + hero.role + ' · Level ' + heroLevel(condition) + '</span>' + conditionMeters(key, true) +
+          '<span class="portrait ' + ui.colour + '">' + ui.initials + '</span><span class="rail-copy"><strong>' + esc(hero.name) + '</strong><span>' + hero.role + ' · Level ' + heroLevel(condition) + '</span>' + conditionMeters(key, false) +
           (activity ? '<em data-hero-timer="' + key + '">' + activity.title + ' ' + timeText(activity.remaining) + '</em>' : '<em>Available</em>') + '</span></button>';
       }).join('') + '<p class="rail-hint">Select a hero, or drag an available hero into a facility slot.</p></aside>';
   }
 
   function activityStrip() {
     var chips = [];
-    if (state.activities.expedition) chips.push('<button data-action="open-activity" data-activity="expedition"><span>Expedition</span><strong data-activity-countdown="expedition">' + timeText(remaining(state.activities.expedition)) + '</strong></button>');
+    allExpeditionActivities().forEach(function (entry) { chips.push('<button data-action="open-activity" data-activity="expedition" data-expedition="' + entry.key + '"><span>' + esc(E.ENCOUNTERS[entry.key].name) + '</span><strong data-activity-countdown="expedition:' + entry.key + '">' + timeText(remaining(entry.activity)) + '</strong></button>'); });
+    Object.keys(state.expeditionResults).forEach(function (key) { chips.push('<button class="ready" data-action="open-activity" data-activity="expedition-result" data-expedition="' + key + '"><span>' + esc(E.ENCOUNTERS[key].name) + '</span><strong>Outcome ready</strong></button>'); });
     if (state.activities.craft) chips.push('<button data-action="open-activity" data-activity="craft"><span>Workshop</span><strong data-activity-countdown="craft">' + timeText(remaining(state.activities.craft)) + '</strong></button>');
     if (state.completedActivity && state.completedActivity.type === 'craft') chips.push('<button class="ready" data-action="open-activity" data-activity="craft-ready"><span>Workshop</span><strong>Item ready</strong></button>');
     return chips.length ? '<div class="activity-strip" aria-label="Company activities">' + chips.join('') + '</div>' : '';
@@ -469,20 +503,29 @@
   function town() { return state.activeBuilding ? facilityPanel(state.activeBuilding) : townScene(); }
 
   function expeditionList() {
-    return heading('Operations', 'Expeditions', 'Choose an expedition, assemble any available combination of heroes and review its forecast.') + '<section class="mission-card"><div class="mission-banner"><span>North Road</span><strong>Level 1</strong></div><h2>Abandoned Road</h2><p>Merchants report bandits and strange lights along the old north road. Clear the obstruction and recover anything useful.</p><div class="tags"><span>Physical threats</span><span>' + (state.firstExpeditionComplete ? '25 sec' : '45 sec tutorial') + '</span><span>Repeatable</span></div><div class="reward-strip"><span>14–21 gold</span><span>3–4 scrap</span><span>Possible herb</span><span>Combat XP</span></div><button class="primary" data-action="prepare-expedition" data-tutorial-target="mission-prepare">Prepare company</button></section>';
+    var cards = Object.keys(E.ENCOUNTERS).map(function (key) {
+      var encounter = E.ENCOUNTERS[key], activity = state.activities.expeditions[key], result = state.expeditionResults[key], unlocked = expeditionUnlocked(key);
+      var status;
+      if (!unlocked) status = '<div class="mission-locked">Complete ' + (key === 'briar-den' ? 'the Abandoned Road' : 'the Briar Den') + ' to unlock.</div>';
+      else if (result) status = '<button class="primary outcome-ready" data-action="review-expedition" data-expedition="' + key + '">Review outcome</button>';
+      else if (activity) status = '<div class="mission-progress"><div><span>' + esc((E.APPROACHES[activity.approach] || E.APPROACHES.standard).name) + ' approach</span><strong data-countdown-key="expedition:' + key + '">' + timeText(remaining(activity)) + '</strong></div><div class="progress"><i data-progress-key="expedition:' + key + '" style="width:' + activityProgress(activity) + '%"></i></div><span>' + activity.party.map(function (heroKey) { return E.HEROES[heroKey].name.split(' ')[0]; }).join(', ') + (activity.party.length === 1 ? ' is' : ' are') + ' away</span></div>';
+      else status = '<button class="primary" data-action="prepare-expedition" data-expedition="' + key + '"' + (key === 'abandoned-road' ? ' data-tutorial-target="mission-prepare"' : '') + '>Prepare company</button>';
+      var listedDuration = key === 'abandoned-road' && !state.firstExpeditionComplete ? '45 sec opening' : encounter.duration + ' sec standard';
+      return '<section class="mission-card ' + (!unlocked ? 'locked' : '') + '"><div class="mission-banner"><span>' + esc(encounter.region) + '</span><strong>Level ' + encounter.level + '</strong></div><h2>' + esc(encounter.name) + '</h2><p>' + esc(encounter.description) + '</p><div class="tags">' + encounter.tags.map(function (tag) { return '<span>' + esc(tag) + '</span>'; }).join('') + '<span>' + listedDuration + '</span><span>Repeatable</span></div><div class="reward-strip">' + encounter.rewardLabel.map(function (reward) { return '<span>' + esc(reward) + '</span>'; }).join('') + '</div>' + status + '</section>';
+    }).join('');
+    return heading('Operations', 'Expeditions', 'Each location has one expedition slot. Different locations can run at the same time, but a hero can only undertake one activity.') + '<div class="mission-board">' + cards + '</div>';
   }
 
   function preparation() {
+    var encounter = E.ENCOUNTERS[state.selectedExpedition];
+    var approach = E.APPROACHES[state.selectedApproach] || E.APPROACHES.standard;
+    var baseDuration = state.selectedExpedition === 'abandoned-road' && !state.firstExpeditionComplete ? 45 : encounter.duration;
+    var expectedDuration = Math.max(8, Math.round(baseDuration * approach.duration));
     var result = forecast();
-    var danger = result ? '<aside class="danger-panel"><span class="label">Serious outcome risk</span><strong class="danger-value">' + result.danger + '%</strong><div class="risk"><i style="width:' + result.danger + '%"></i></div><h3>' + (result.danger <= 10 ? 'Low risk' : result.danger <= 30 ? 'Viable' : result.danger <= 55 ? 'Manageable' : 'Risky') + '</h3><p class="danger-explainer">Chance of failure or an injury serious enough to require treatment.</p><dl><div><dt>Success</dt><dd>' + result.successChance + '%</dd></div><div><dt>Injury</dt><dd>' + result.injuryChance + '%</dd></div><div class="wear-row"><dt>Expected wear</dt><dd>' + result.expectedHealthLoss + '% Health</dd></div></dl><button class="primary" data-action="send-expedition" data-tutorial-target="send-expedition">Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>' : '<aside class="danger-panel empty"><span class="label">Serious outcome risk</span><strong class="danger-value">—</strong><h3>No party selected</h3><p>Select at least one available hero.</p><button class="primary" disabled>Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>';
+    var danger = result ? '<aside class="danger-panel"><span class="label">Serious outcome risk</span><strong class="danger-value">' + result.danger + '%</strong><div class="risk"><i style="width:' + result.danger + '%"></i></div><h3>' + (result.danger <= 10 ? 'Low risk' : result.danger <= 30 ? 'Viable' : result.danger <= 55 ? 'Manageable' : 'Risky') + '</h3><p class="danger-explainer">Chance of failure or an injury serious enough to require treatment.</p><dl><div><dt>Approach</dt><dd>' + approach.name + '</dd></div><div><dt>Duration</dt><dd>' + expectedDuration + ' sec</dd></div><div><dt>Success</dt><dd>' + result.successChance + '%</dd></div><div><dt>Injury</dt><dd>' + result.injuryChance + '%</dd></div><div class="wear-row"><dt>Expected wear</dt><dd>' + result.expectedHealthLoss + '% Health</dd></div></dl><button class="primary" data-action="send-expedition" data-tutorial-target="send-expedition">Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>' : '<aside class="danger-panel empty"><span class="label">Serious outcome risk</span><strong class="danger-value">—</strong><h3>No party selected</h3><p>Select at least one available hero.</p><button class="primary" disabled>Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>';
     var partySlots = [0, 1, 2].map(function (index) { var key = state.selectedParty[index]; return key ? heroCompact(key, { selectable: true }) : emptyPartySlot(index); }).join('');
-    return heading('Expedition preparation', 'Abandoned Road', 'The forecast runs 400 seeded simulations using current condition and equipment.') + '<div class="preparation-grid"><section><div class="section-heading"><h2>Selected company</h2><span>' + state.selectedParty.length + '/3 selected</span></div><div class="party-slot-grid">' + partySlots + '</div><div class="available-roster"><div class="section-heading"><div><span class="label">Company roster</span><h3>Choose adventurers</h3></div><span>' + Object.keys(E.HEROES).length + ' heroes</span></div><div class="roster-choice-grid">' + Object.keys(E.HEROES).map(rosterChoice).join('') + '</div></div></section>' + danger + '</div>';
-  }
-
-  function activeExpedition() {
-    var activity = state.activities.expedition;
-    if (!activity) return expeditionList();
-    return heading('Expedition under way', 'The party is on the road', 'Your company is away. Progress continues if you leave this page.') + '<section class="timer-card active-expedition-card"><span class="label">Time remaining</span><div class="timer" data-countdown-key="expedition">' + timeText(remaining(activity)) + '</div><div class="progress"><i data-progress-key="expedition" style="width:' + activityProgress(activity) + '%"></i></div><div class="party-portraits">' + activity.party.map(function (key) { return '<span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span>'; }).join('') + '</div><p>The outcome will be ready when the timer ends.</p></section>';
+    var approaches = Object.keys(E.APPROACHES).map(function (key) { var approach = E.APPROACHES[key]; return '<button class="approach-option ' + (state.selectedApproach === key ? 'selected' : '') + '" data-action="select-approach" data-approach="' + key + '" aria-pressed="' + (state.selectedApproach === key) + '"><strong>' + approach.name + '</strong><span>' + approach.description + '</span></button>'; }).join('');
+    return heading('Expedition preparation', encounter.name, 'The forecast runs 400 seeded simulations using current condition, equipment and approach.') + '<section class="approach-picker"><div class="section-heading"><div><span class="label">Approach</span><h2>How should they proceed?</h2></div><span>Assignment-level choice</span></div><div class="approach-grid">' + approaches + '</div></section><div class="preparation-grid"><section><div class="section-heading"><h2>Selected company</h2><span>' + state.selectedParty.length + '/3 selected</span></div><div class="party-slot-grid">' + partySlots + '</div><div class="available-roster"><div class="section-heading"><div><span class="label">Company roster</span><h3>Choose adventurers</h3></div><span>' + Object.keys(E.HEROES).length + ' heroes</span></div><div class="roster-choice-grid">' + Object.keys(E.HEROES).map(rosterChoice).join('') + '</div></div></section>' + danger + '</div>';
   }
 
   function resultMeter(name, before, after, kind, maximum) {
@@ -492,14 +535,16 @@
   }
 
   function results() {
-    var result = state.currentResult;
+    var key = state.selectedExpedition;
+    var result = state.resultContext === 'admin' ? state.currentResult : state.expeditionResults[key];
     if (!result) return expeditionList();
+    var encounter = E.ENCOUNTERS[result.encounterKey || key] || E.ENCOUNTERS['abandoned-road'];
     var changes = result.changes || {}, party = Object.keys(changes);
     var averageLoss = party.length ? party.reduce(function (total, key) { return total + Math.max(0, changes[key].before.health - changes[key].after.health); }, 0) / party.length : 0;
     var injuries = party.filter(function (key) { return result.heroes[key] && result.heroes[key].injured; }).length;
     var verdict = !result.success ? 'The company limped home, but every name remains on the roster.' : injuries ? 'The road exacted a heavy price. Everyone made it back.' : averageLoss <= 10 ? 'The company returned barely scuffed.' : averageLoss <= 25 ? 'A few bruises, but everyone walked home.' : 'A costly victory. The company will feel this one tomorrow.';
-    var resultAction = state.resultContext === 'admin' ? '<button class="primary" data-action="leave-replay">Return</button>' : '<button class="primary" data-action="claim-rewards" data-tutorial-target="claim-rewards">Take rewards</button>';
-    return heading('Expedition complete', result.success ? 'Road secured' : 'Company withdrawn', verdict) + '<section class="outcome-summary"><div><span class="label">Company outcome</span><h2>' + verdict + '</h2><p>' + result.rounds + ' combat rounds · ' + (result.potionUsed ? 'At least one Field Tonic was consumed.' : 'No Field Tonics were needed.') + '</p></div><aside><h3>Recovered</h3><div class="reward-strip"><span>' + result.rewards.gold + ' gold</span><span>' + result.rewards.scrap + ' scrap</span><span>' + result.rewards.herbs + ' herb</span><span>' + result.rewards.xp + ' base XP</span></div></aside></section><section class="results-panel"><div class="section-heading"><h2>Company condition</h2><span>Before → after</span></div><div class="hero-results">' + party.map(function (key) {
+    var resultAction = state.resultContext === 'admin' ? '<button class="primary" data-action="leave-replay">Return</button>' : '<button class="primary" data-action="claim-rewards" data-expedition="' + encounter.key + '" data-tutorial-target="claim-rewards">Take rewards</button>';
+    return heading('Expedition complete', result.success ? encounter.name + ' secured' : 'Company withdrawn', verdict) + '<section class="outcome-summary"><div><span class="label">Company outcome · ' + esc((E.APPROACHES[result.approach] || E.APPROACHES.standard).name) + '</span><h2>' + verdict + '</h2><p>' + result.rounds + ' combat rounds · ' + (result.potionUsed ? 'At least one Field Tonic was consumed.' : 'No Field Tonics were needed.') + '</p></div><aside><h3>Recovered</h3><div class="reward-strip"><span>' + result.rewards.gold + ' gold</span><span>' + result.rewards.scrap + ' scrap</span><span>' + result.rewards.herbs + ' herb</span><span>' + result.rewards.xp + ' base XP</span></div></aside></section><section class="results-panel"><div class="section-heading"><h2>Company condition</h2><span>Before → after</span></div><div class="hero-results">' + party.map(function (key) {
       var change = changes[key];
       return '<article><div class="result-hero-head"><span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span><div><h3>' + E.HEROES[key].name + '</h3><span>+' + change.xpGain + ' XP</span></div></div>' + resultMeter('Health', change.before.health, change.after.health, 'health') + (E.HEROES[key].maxMana ? resultMeter('Mana', change.before.mana, change.after.mana, 'mana', E.HEROES[key].maxMana) : '') + resultMeter('Readiness', change.before.readiness, change.after.readiness, 'ready') + '</article>';
     }).join('') + '</div>' + resultAction + '</section><details class="encounter-log"><summary>Show encounter log <span>' + result.rounds + ' rounds · Seeded</span></summary><ol>' + result.log.map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>';
@@ -507,7 +552,6 @@
 
   function expeditions() {
     if (state.expeditionScreen === 'prepare') return preparation();
-    if (state.expeditionScreen === 'active') return activeExpedition();
     if (state.expeditionScreen === 'results') return results();
     return expeditionList();
   }
@@ -633,7 +677,7 @@
     var app = document.getElementById('app');
     if (state.stage === 'intro') { app.innerHTML = intro(); bind(); return; }
     var notice = state.notice ? '<div class="notice">' + esc(state.notice) + '</div>' : '';
-    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.4</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
+    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.5</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
     bind(); applyTutorialSpotlight();
   }
 
@@ -674,19 +718,25 @@
   }
 
   function startExpedition() {
-    if (!state.selectedParty.length) return;
+    var encounterKey = state.selectedExpedition, encounter = E.ENCOUNTERS[encounterKey], approach = E.APPROACHES[state.selectedApproach] || E.APPROACHES.standard;
+    if (!state.selectedParty.length || !encounter || state.activities.expeditions[encounterKey] || state.expeditionResults[encounterKey]) return;
     var run = state.runNumber + 1, attackBonuses = equipmentAttack();
-    var seed = E.encounterSeed(state.seed, run, state.selectedParty, equipmentSignature()), heroStates = {};
+    var seed = E.encounterSeed(state.seed, run, state.selectedParty, equipmentSignature(), encounterKey, state.selectedApproach), heroStates = {};
     state.selectedParty.forEach(function (key) { heroStates[key] = Object.assign({}, state.heroes[key]); });
-    var duration = state.firstExpeditionComplete ? 25 : 45;
-    state.activities.expedition = { type: 'expedition', title: 'Abandoned Road', party: state.selectedParty.slice(), heroStates: heroStates, startedAt: Date.now(), endsAt: Date.now() + duration * 1000, duration: duration, seed: seed, equipmentAttack: attackBonuses, context: state.firstExpeditionComplete ? 'repeat' : 'first' };
-    set({ runNumber: run, expeditionScreen: 'active', currentResult: null, tutorial: null });
+    var first = encounterKey === 'abandoned-road' && !state.firstExpeditionComplete;
+    var baseDuration = first ? 45 : encounter.duration;
+    var duration = Math.max(8, Math.round(baseDuration * approach.duration));
+    state.activities.expeditions[encounterKey] = { type: 'expedition', title: encounter.name, encounterKey: encounterKey, approach: state.selectedApproach, party: state.selectedParty.slice(), heroStates: heroStates, startedAt: Date.now(), endsAt: Date.now() + duration * 1000, duration: duration, seed: seed, equipmentAttack: attackBonuses, context: first ? 'first' : 'repeat' };
+    set({ runNumber: run, expeditionScreen: 'list', currentResult: null, tutorial: null, notice: encounter.name + ' is under way. Other locations remain available.' });
   }
 
-  function claimRewards() {
-    if (!state.currentResult) return;
-    var rewards = state.currentResult.rewards, first = state.resultContext === 'first';
-    state.gold += rewards.gold; state.scrap += rewards.scrap; state.herbs += rewards.herbs; state.resultClaimed = true; state.currentResult = null;
+  function claimRewards(expeditionKey) {
+    var result = state.expeditionResults[expeditionKey];
+    if (!result) return;
+    var rewards = result.rewards, first = expeditionKey === 'abandoned-road' && !state.firstExpeditionComplete;
+    state.gold += rewards.gold; state.scrap += rewards.scrap; state.herbs += rewards.herbs;
+    state.completedExpeditions[expeditionKey] = Number(state.completedExpeditions[expeditionKey] || 0) + 1;
+    delete state.expeditionResults[expeditionKey];
     set({ firstExpeditionComplete: state.firstExpeditionComplete || first, expeditionScreen: 'list', view: 'expeditions', tutorial: first && !state.tutorialSkipped ? 'return-town-workshop' : null, notice: 'Rewards added to company stores.' });
   }
 
@@ -719,10 +769,12 @@
       var selected = state.selectedParty.indexOf(data.hero) >= 0 ? state.selectedParty.filter(function (key) { return key !== data.hero; }) : state.selectedParty.length < 3 ? state.selectedParty.concat(data.hero) : state.selectedParty;
       set({ selectedParty: selected });
     }
-    if (action === 'prepare-expedition') set({ expeditionScreen: 'prepare', selectedParty: Object.keys(E.HEROES).filter(function (key) { return !heroBusy(key); }).slice(0, 3), tutorial: state.tutorial === 'expedition-prepare' ? 'party-send' : state.tutorial });
+    if (action === 'prepare-expedition' && data.expedition && expeditionUnlocked(data.expedition) && !state.activities.expeditions[data.expedition] && !state.expeditionResults[data.expedition]) set({ expeditionScreen: 'prepare', selectedExpedition: data.expedition, selectedApproach: 'standard', selectedParty: Object.keys(E.HEROES).filter(function (key) { return !heroBusy(key); }).slice(0, 3), tutorial: state.tutorial === 'expedition-prepare' ? 'party-send' : state.tutorial });
     if (action === 'cancel-preparation') set({ expeditionScreen: 'list' });
+    if (action === 'select-approach' && data.approach && E.APPROACHES[data.approach]) set({ selectedApproach: data.approach });
     if (action === 'send-expedition') startExpedition();
-    if (action === 'claim-rewards') claimRewards();
+    if (action === 'review-expedition' && data.expedition && state.expeditionResults[data.expedition]) set({ selectedExpedition: data.expedition, expeditionScreen: 'results' });
+    if (action === 'claim-rewards' && data.expedition) claimRewards(data.expedition);
     if (action === 'leave-replay') set({ currentResult: null, resultContext: null, expeditionScreen: 'list' });
     if (action === 'close-building') set({ activeBuilding: null });
     if (action === 'open-building' && data.building) openBuilding(data.building);
@@ -760,7 +812,8 @@
       set({ completedActivity: null, notice: 'The finished item has been stored in company inventory.' });
     }
     if (action === 'open-activity') {
-      if (data.activity === 'expedition') set({ view: 'expeditions', expeditionScreen: state.activities.expedition ? 'active' : state.expeditionScreen, activeBuilding: null });
+      if (data.activity === 'expedition') set({ view: 'expeditions', expeditionScreen: 'list', selectedExpedition: data.expedition || state.selectedExpedition, activeBuilding: null });
+      if (data.activity === 'expedition-result') set({ view: 'expeditions', expeditionScreen: 'results', selectedExpedition: data.expedition, activeBuilding: null });
       if (data.activity === 'craft') set({ view: 'town', activeBuilding: 'workshop' });
       if (data.activity === 'craft-ready') set(state.workshopOutput ? { view: 'town', activeBuilding: 'workshop' } : { view: 'inventory', activeBuilding: null, completedActivity: null });
     }
@@ -783,7 +836,7 @@
       else set({ notice: 'Capacity must be between 12 and 60 and cannot be below the number of stored items.' });
     }
     if (action === 'skip-timers') {
-      if (state.activities.expedition) state.activities.expedition.endsAt = Date.now();
+      allExpeditionActivities().forEach(function (entry) { entry.activity.endsAt = Date.now(); });
       if (state.activities.craft) state.activities.craft.endsAt = Date.now();
       allFacilityActivities().forEach(function (entry) { entry.activity.endsAt = Date.now(); });
       completeActivities(); render();
@@ -791,7 +844,7 @@
     if (action === 'apply-seed') { var input = document.getElementById('seed-input'); if (input && input.value.trim()) set({ seed: input.value.trim(), runNumber: 0, notice: 'World seed changed. Future expeditions will use the new sequence.' }); }
     if (action === 'random-seed') { var bytes = new Uint32Array(1); crypto.getRandomValues(bytes); set({ seed: String(bytes[0]), runNumber: 0, notice: 'A new world seed has been generated.' }); }
     if (action === 'copy-seed') { if (navigator.clipboard) navigator.clipboard.writeText(state.seed); set({ notice: 'Seed copied: ' + state.seed }); }
-    if (action === 'replay' && state.lastResult) set({ currentResult: state.lastResult.result, resultContext: 'admin', view: 'expeditions', expeditionScreen: 'results' });
+    if (action === 'replay' && state.lastResult) set({ currentResult: E.simulateBattle(Object.assign({}, state.lastResult.inputs, { includeLog: true })), resultContext: 'admin', selectedExpedition: state.lastResult.inputs.encounterKey || 'abandoned-road', view: 'expeditions', expeditionScreen: 'results' });
     if (action === 'export') exportSave();
     if (action === 'install' && installPrompt) installPrompt.prompt().then(function () { installPrompt = null; render(); });
     if (action === 'restart') { state = fresh(); save(); render(); }
@@ -800,7 +853,7 @@
   function exportSave() {
     var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob), link = document.createElement('a');
-    link.href = url; link.download = 'adventure-company-save-v4.json'; link.click(); URL.revokeObjectURL(url); set({ notice: 'Save exported.' });
+    link.href = url; link.download = 'adventure-company-save-v5.json'; link.click(); URL.revokeObjectURL(url); set({ notice: 'Save exported.' });
   }
 
   function importSave(event) {
@@ -820,11 +873,11 @@
   if (context && context.registerTool) {
     var schema = { type: 'object', properties: {}, additionalProperties: false };
     Promise.resolve(context.registerTool({ name: 'get_company_state', title: 'Get company state', description: 'Read current Adventure Company progress, activities and resources.', inputSchema: schema, annotations: { readOnlyHint: true, untrustedContentHint: false }, execute: function () { return { view: state.view, seed: state.seed, runNumber: state.runNumber, resources: { gold: state.gold, scrap: state.scrap, herbs: state.herbs }, activities: state.activities }; } })).catch(function () {});
-    Promise.resolve(context.registerTool({ name: 'finish_current_prototype_timers', title: 'Finish current timers', description: 'Finish all active prototype timers.', inputSchema: schema, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: function () { if (state.activities.expedition) state.activities.expedition.endsAt = Date.now(); if (state.activities.craft) state.activities.craft.endsAt = Date.now(); allFacilityActivities().forEach(function (entry) { entry.activity.endsAt = Date.now(); }); completeActivities(); render(); return { finished: true, view: state.view }; } })).catch(function () {});
+    Promise.resolve(context.registerTool({ name: 'finish_current_prototype_timers', title: 'Finish current timers', description: 'Finish all active prototype timers.', inputSchema: schema, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: function () { allExpeditionActivities().forEach(function (entry) { entry.activity.endsAt = Date.now(); }); if (state.activities.craft) state.activities.craft.endsAt = Date.now(); allFacilityActivities().forEach(function (entry) { entry.activity.endsAt = Date.now(); }); completeActivities(); render(); return { finished: true, view: state.view }; } })).catch(function () {});
   }
 
   setInterval(function () {
-    var active = Boolean(state.activities.expedition || state.activities.craft || allFacilityActivities().length);
+    var active = Boolean(allExpeditionActivities().length || state.activities.craft || allFacilityActivities().length);
     if (!active) return;
     if (completeActivities()) render(); else updateLiveActivities();
   }, 1000);

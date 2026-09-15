@@ -70,6 +70,12 @@ assert.match(town, /Sable Reed/);
 assert.match(town, /aria-label="Health: 44 of 44"/);
 assert.doesNotMatch(town, /aria-label="Mana: 0 of 0"/);
 
+const wornRail = renderState(playing({ heroes: { elara: { health: 50, mana: 0, readiness: 40, xp: 25 } } }));
+assert.match(wornRail, /aria-label="Health: 22 of 44"/);
+assert.match(wornRail, /aria-label="Readiness: 40 of 100"/);
+assert.match(wornRail, /aria-label="Experience: 25 of 100"/);
+assert.match(styles, /rail-copy>em/,'Rail status styling must not override meter fills');
+
 const tavern = renderState(playing({ activeBuilding: 'tavern' }));
 assert.match(tavern, /2 configurable recovery slots|Slot 2/);
 assert.match(tavern, /Place selected hero/);
@@ -94,6 +100,7 @@ assert.doesNotMatch(roster, /title=/, 'Help terms must not trigger duplicate nat
 
 const equipment = renderState(playing({
   view: 'inventory',
+  selectedHero: 'sable',
   equipmentSlot: 'mainHand',
   inventory: [{ id: 'test-sword', key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Test' }]
 }));
@@ -101,6 +108,8 @@ assert.match(equipment, /Choose Main hand/);
 assert.match(equipment, /Showing equipment compatible with this hero and slot/);
 assert.match(equipment, /data-action="equip-item"/);
 assert.match(equipment, /data-action="cancel-equipment-choice"/);
+assert.match(equipment, /Equip Sable/);
+assert.match(equipment, /Vanguard or Ranger or Skirmisher/,'Old Iron Swords must migrate to current class compatibility');
 
 const preparation = renderState(playing({ view: 'expeditions', expeditionScreen: 'prepare' }));
 assert.match(preparation, /Selected company/);
@@ -111,6 +120,26 @@ assert.match(preparation, /Expected wear/);
 assert.doesNotMatch(preparation, />ATK</);
 assert.match(preparation, /class="info-popover"/);
 assert.match(preparation, /Vanguard/);
+assert.match(preparation, /How should they proceed/);
+assert.match(preparation, />Careful</);
+assert.match(preparation, />Scavenge</);
+assert.match(preparation, /Favoured/);
+
+const expeditionBoard = renderState(playing({ view: 'expeditions', firstExpeditionComplete: true, completedExpeditions: { 'briar-den': 1 } }));
+assert.match(expeditionBoard, /Abandoned Road/);
+assert.match(expeditionBoard, /Briar Den/);
+assert.match(expeditionBoard, /Cinder Watch/);
+
+const concurrentBoard = renderState(playing({
+  view: 'expeditions', firstExpeditionComplete: true,
+  activities: { expeditions: {
+    'abandoned-road': { party: ['elara'], approach: 'standard', duration: 25, endsAt: Date.now()+25000 },
+    'briar-den': { party: ['fen'], approach: 'scavenge', duration: 45, endsAt: Date.now()+45000 }
+  }, craft: null, facilities: { tavern: [null,null], infirmary: [null] } }
+}));
+assert.match(concurrentBoard, /Elara is away/);
+assert.match(concurrentBoard, /Fen is away/);
+assert.match(concurrentBoard, /Scavenge approach/);
 
 const inventory = renderState(playing({
   view: 'inventory',

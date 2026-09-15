@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.4
+## Prototype 0.5
 
 The current slice covers:
 
@@ -29,6 +29,11 @@ The current slice covers:
 - explicit caster Mana pools and clearer Health, Mana, Readiness and XP indicators
 - multi-trait hero data and presentation
 - separate serious-outcome risk and expected-wear forecasts
+- three expedition locations with staged unlocks and distinct physical, evasive and magical/fire threats
+- concurrent expeditions across different locations, with one activity slot per location
+- Careful, Standard, Aggressive and Scavenge expedition approaches
+- encounter-specific Favoured indicators with exact explanations
+- live Health, Mana, Readiness and XP meters in the hero rail
 
 The game is deliberately data-led and low-animation. The current goal is to validate the Town, expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.
 
