@@ -539,7 +539,7 @@
   }
 
   function claimRewards() {
-    if (state.resultClaimed || !state.currentResult) return;
+    if (!state.currentResult) return;
     var rewards = state.currentResult.rewards, first = state.resultContext === 'first';
     state.gold += rewards.gold; state.scrap += rewards.scrap; state.herbs += rewards.herbs; state.resultClaimed = true; state.currentResult = null;
     set({ firstExpeditionComplete: state.firstExpeditionComplete || first, expeditionScreen: 'list', view: 'expeditions', tutorial: first && !state.tutorialSkipped ? 'return-town-workshop' : null, notice: 'Rewards added to company stores.' });

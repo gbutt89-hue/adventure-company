@@ -6,6 +6,8 @@ const vm = require('node:vm');
 const E = require('./engine.js');
 const source = fs.readFileSync('./game.js', 'utf8');
 
+assert.doesNotMatch(source, /state\.resultClaimed \|\| !state\.currentResult/, 'A stale claim flag must not block an unclaimed visible result');
+
 function renderState(savedState, storageKey) {
   const app = { innerHTML: '' };
   const storage = new Map();
