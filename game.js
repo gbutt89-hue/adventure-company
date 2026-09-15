@@ -470,7 +470,10 @@
     };
     if (map[state.tutorial]) {
       var active = document.querySelector('[data-tutorial-target="' + map[state.tutorial] + '"]');
-      if (active) active.classList.add('spotlight');
+      if (active) {
+        active.classList.add('spotlight');
+        if (map[state.tutorial].indexOf('nav-') !== 0 && active.scrollIntoView) active.scrollIntoView({ block: 'center', inline: 'nearest' });
+      }
     }
   }
 
