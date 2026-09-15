@@ -16,6 +16,8 @@ assert.ok(forecastA.successChance>=0&&forecastA.successChance<=100);
 assert.ok(forecastA.danger>=1&&forecastA.danger<=99);
 
 assert.equal(E.effectiveStats('elara',{readiness:100,swordEquipped:false}).armour,E.HEROES.elara.armour,'Displayed and simulated Armour must share one source');
+assert.equal(E.effectiveStats('orin',{readiness:100}).ward,E.HEROES.orin.ward,'Displayed Ward must share the combat data source');
+assert.equal(E.HEROES.orin.combatStyle,'Caster','The Acolyte must be identified as a caster');
 assert.ok(E.effectiveStats('fen',{readiness:35}).speed<E.effectiveStats('fen',{readiness:100}).speed,'Low Readiness must reduce effective Speed');
 assert.equal(E.experienceGain('orin',20),25,'Studious must grant 25% additional expedition XP');
 assert.match(E.TRAITS.Protective,/38%/,'Protective must expose its exact effect');
@@ -49,4 +51,5 @@ assert.ok(logs.size>1,'Different seeds should produce variable encounter logs');
 const tutorialSeed=E.encounterSeed('731942',1,['elara','fen','orin'],false);
 const tutorial=E.simulateBattle({party:['elara','fen','orin'],heroStates:fullCondition,swordEquipped:false,seed:tutorialSeed,includeLog:true});
 assert.equal(tutorial.success,true,'The default opening party should complete the tutorial expedition');
+assert.ok(tutorial.rewards.scrap>=3,'A successful opening expedition must fund the first Iron Sword');
 console.log('Adventure Company engine checks passed.');

@@ -6,9 +6,9 @@
   'use strict';
 
   const HEROES = {
-    elara: { name: 'Elara Voss', role: 'Vanguard', maxHealth: 44, attack: 9, armour: 5, speed: 8, damageType: 'physical', trait: 'Protective' },
-    fen: { name: 'Fen Alder', role: 'Ranger', maxHealth: 32, attack: 8, armour: 2, speed: 16, damageType: 'physical', trait: 'Eagle-eyed' },
-    orin: { name: 'Orin Vale', role: 'Acolyte', maxHealth: 30, attack: 7, armour: 1, speed: 11, damageType: 'magical', trait: 'Studious' }
+    elara: { name: 'Elara Voss', role: 'Vanguard', combatStyle: 'Melee', maxHealth: 44, attack: 9, armour: 5, ward: 3, speed: 8, accuracy: 84, critical: 11, damageType: 'physical', trait: 'Protective' },
+    fen: { name: 'Fen Alder', role: 'Ranger', combatStyle: 'Ranged', maxHealth: 32, attack: 8, armour: 2, ward: 2, speed: 16, accuracy: 91, critical: 18, damageType: 'physical', trait: 'Eagle-eyed' },
+    orin: { name: 'Orin Vale', role: 'Acolyte', combatStyle: 'Caster', maxHealth: 30, attack: 7, armour: 1, ward: 6, speed: 11, accuracy: 84, critical: 11, damageType: 'magical', trait: 'Studious' }
   };
 
   const TRAITS = {
@@ -18,9 +18,9 @@
   };
 
   const ROLES = {
-    Vanguard: 'A durable physical fighter suited to armour, shields and protecting allies.',
-    Ranger: 'A fast physical attacker with greater accuracy and critical-hit chance.',
-    Acolyte: 'A magical attacker whose spells ignore Armour but consume Mana.'
+    Vanguard: 'Melee · Physical. A durable fighter suited to armour, shields and protecting allies.',
+    Ranger: 'Ranged · Physical. A fast attacker with greater accuracy and critical-hit chance.',
+    Acolyte: 'Caster · Magical. A spellcaster whose attacks test Ward and consume Mana.'
   };
 
   const ENEMIES = [
@@ -72,7 +72,10 @@
     return {
       attack: Math.max(1, Math.round((hero.attack + weaponBonus) * modifier)),
       armour: hero.armour,
+      ward: hero.ward,
       speed: Math.max(1, Math.round(hero.speed * modifier)),
+      accuracy: hero.accuracy,
+      critical: hero.critical,
       readinessModifier: modifier
     };
   }
@@ -99,7 +102,8 @@
       return {
         key, side: 'hero', name: HEROES[key].name, hp, startingHp: hp,
         startingHealthPercent: Math.round(healthPercent), maxHp: HEROES[key].maxHealth,
-        attack: stats.attack, armour: stats.armour, speed: stats.speed,
+        attack: stats.attack, armour: stats.armour, ward: stats.ward, speed: stats.speed,
+        accuracy: stats.accuracy, critical: stats.critical,
         readinessModifier: stats.readinessModifier, mana, startingMana: mana,
         magical: HEROES[key].damageType === 'magical', potion: true
       };
@@ -130,12 +134,12 @@
           const targets = enemyUnits.filter(unit => unit.hp > 0);
           if (!targets.length) break;
           const target = pick(targets, rng);
-          const hitChance = actor.key === 'fen' ? 0.91 : 0.84;
+          const hitChance = actor.accuracy / 100;
           if (rng() > hitChance) {
             write(actor.name + ' attacks ' + target.name + ' but misses.');
             continue;
           }
-          const critical = rng() < (actor.key === 'fen' ? 0.18 : 0.11);
+          const critical = rng() < actor.critical / 100;
           const variance = Math.floor(rng() * 4) - 1;
           let magical = actor.magical;
           let attack = actor.attack;
@@ -210,7 +214,7 @@
     return {
       success, invalid: false, log, heroes: heroResults, rounds: round,
       potionUsed: heroUnits.some(unit => !unit.potion),
-      rewards: success ? { gold: 14 + Math.floor(rng() * 8), scrap: 2 + Math.floor(rng() * 3), herbs: rng() < 0.55 ? 1 : 0, xp: 20 + round } : { gold: 0, scrap: 0, herbs: 0, xp: 8 }
+      rewards: success ? { gold: 14 + Math.floor(rng() * 8), scrap: 3 + Math.floor(rng() * 2), herbs: rng() < 0.55 ? 1 : 0, xp: 20 + round } : { gold: 0, scrap: 0, herbs: 0, xp: 8 }
     };
   }
 
