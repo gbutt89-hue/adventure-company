@@ -4,6 +4,7 @@
   var E = window.AdventureEngine;
   var SAVE_KEY = 'adventure-company-prototype-v3';
   var LEGACY_KEYS = ['adventure-company-prototype-v2', 'adventure-company-prototype-v1'];
+  var DEFAULT_INVENTORY_CAPACITY = 12;
   var installPrompt = null;
   var draggedHero = null;
 
@@ -68,7 +69,8 @@
       selectedParty: ['elara', 'fen', 'orin'], selectedHero: 'elara', firstExpeditionComplete: false,
       tutorial: 'town-expeditions', tutorialSkipped: false, rosterOpen: false, devOpen: false, notice: null,
       currentResult: null, lastResult: null, resultContext: null, resultClaimed: false,
-      selectedInventoryItem: null, equipmentSlot: null, completedActivity: null,
+      selectedInventoryItem: null, equipmentSlot: null, showIncompatibleItems: false, pendingDismantleId: null, completedActivity: null,
+      inventoryCapacity: DEFAULT_INVENTORY_CAPACITY, workshopOutput: null,
       craftXp: 0, lastCraftXpGain: 0, nextItemId: 1, inventory: [],
       equipment: { elara: emptyEquipment(), fen: emptyEquipment(), orin: emptyEquipment() },
       activities: { expedition: null, craft: null, facilities: emptyFacilities() },
@@ -121,6 +123,8 @@
     });
     next.inventory = Array.isArray(next.inventory) ? next.inventory : [];
     next.inventory = next.inventory.map(normaliseItem);
+    next.inventoryCapacity = Math.max(DEFAULT_INVENTORY_CAPACITY, Number(next.inventoryCapacity) || 0, next.inventory.length);
+    next.workshopOutput = normaliseItem(next.workshopOutput);
     Object.keys(E.HEROES).forEach(function (key) {
       Object.keys(next.equipment[key]).forEach(function (slot) {
         if (next.equipment[key][slot]) next.equipment[key][slot] = normaliseItem(next.equipment[key][slot]);
@@ -158,6 +162,7 @@
   function esc(value) { return String(value).replace(/[&<>'"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]; }); }
   function set(patch) { state = normalise(Object.assign({}, state, patch)); save(); render(); }
   function remaining(activity) { return activity ? Math.max(0, Math.ceil((activity.endsAt - Date.now()) / 1000)) : 0; }
+  function inventoryFull() { return state.inventory.length >= state.inventoryCapacity; }
   function timeText(total) { return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0'); }
   function activityProgress(activity) { return activity ? Math.max(0, Math.min(100, (1 - remaining(activity) / activity.duration) * 100)) : 0; }
   function hasIronSword(key) { return Boolean(state.equipment[key] && state.equipment[key].mainHand && state.equipment[key].mainHand.key === 'iron-sword'); }
@@ -226,11 +231,17 @@
     var craft = state.activities.craft;
     if (craft && craft.endsAt <= now) {
       state.activities.craft = null;
-      state.inventory.push(ironSword('item-' + state.nextItemId));
+      var finishedItem = ironSword('item-' + state.nextItemId);
       state.nextItemId += 1;
       state.craftXp = Math.min(100, state.craftXp + 18);
       state.lastCraftXpGain = 18;
-      state.notice = 'The Iron Sword is ready and has been placed in company inventory.';
+      if (inventoryFull()) {
+        state.workshopOutput = finishedItem;
+        state.notice = 'The Iron Sword is ready, but company inventory is full. It is waiting safely at the Workshop.';
+      } else {
+        state.inventory.push(finishedItem);
+        state.notice = 'The Iron Sword is ready and has been placed in company inventory.';
+      }
       state.completedActivity = { type: 'craft', label: 'Workshop: item ready' };
       if (!state.tutorialSkipped && state.tutorial === 'crafting') state.tutorial = 'open-roster';
       changed = true;
@@ -389,9 +400,12 @@
   function workshopPanel() {
     var craft = state.activities.craft;
     var duration = state.tutorial === 'forge' ? 10 : 30;
-    var body = craft ? '<article class="craft-card"><div class="item-icon">⚔</div><div><span class="label">In progress</span><h3>Iron Sword</h3><div class="timer small" data-countdown-key="craft">' + timeText(remaining(craft)) + '</div><div class="progress"><i data-progress-key="craft" style="width:' + activityProgress(craft) + '%"></i></div></div></article>' :
-      '<article class="craft-card"><div class="item-icon">⚔</div><div><span class="label">Common main-hand weapon</span><h3>Iron Sword</h3><p>Attack +4. Usable by a Vanguard or Ranger.</p><div class="costs"><span>15 gold</span><span>3 scrap</span><span>' + duration + ' sec</span><span>+18 Craft XP</span></div><button class="primary" data-action="craft" data-tutorial-target="forge" ' + (state.gold < 15 || state.scrap < 3 ? 'disabled' : '') + '>Forge</button></div></article>';
-    return facilityFrame('workshop', body + '<aside class="workshop-level"><span class="label">Crafting level 1</span><strong>' + state.craftXp + ' / 100 Craft XP</strong><div class="progress"><i style="width:' + state.craftXp + '%"></i></div><p>Finished items enter Inventory. Equipment is managed from a hero’s character sheet.</p></aside>');
+    var storage = '<span class="storage-count ' + (inventoryFull() ? 'full' : '') + '">' + state.inventory.length + '/' + state.inventoryCapacity + ' inventory slots occupied</span>';
+    var body;
+    if (craft) body = '<article class="craft-card"><div class="item-icon">⚔</div><div><span class="label">In progress</span><h3>Iron Sword</h3><div class="timer small" data-countdown-key="craft">' + timeText(remaining(craft)) + '</div><div class="progress"><i data-progress-key="craft" style="width:' + activityProgress(craft) + '%"></i></div></div></article>';
+    else if (state.workshopOutput) body = '<article class="craft-card output-ready"><div class="item-icon">⚔</div><div><span class="label">Craft complete</span><h3>' + state.workshopOutput.name + '</h3><p>' + (inventoryFull() ? 'Company inventory is full. The item will remain safely here until space is available.' : 'A space is available in company inventory.') + '</p>' + storage + '<div class="craft-actions"><button class="primary" data-action="store-workshop-output" ' + (inventoryFull() ? 'disabled' : '') + '>Store in Inventory</button><button class="secondary" data-view="inventory">Manage Inventory</button></div></div></article>';
+    else body = '<article class="craft-card"><div class="item-icon">⚔</div><div><span class="label">Common main-hand weapon</span><h3>Iron Sword</h3><p>Attack +4. Usable by a Vanguard or Ranger.</p><div class="costs"><span>15 gold</span><span>3 scrap</span><span>' + duration + ' sec</span><span>+18 Craft XP</span></div>' + storage + '<button class="primary" data-action="craft" data-tutorial-target="forge" ' + (state.gold < 15 || state.scrap < 3 || inventoryFull() ? 'disabled' : '') + '>Forge</button>' + (inventoryFull() ? '<button class="secondary manage-storage" data-view="inventory">Manage Inventory</button>' : '') + '</div></article>';
+    return facilityFrame('workshop', body + '<aside class="workshop-level"><span class="label">Crafting level 1</span><strong>' + state.craftXp + ' / 100 Craft XP</strong><div class="progress"><i style="width:' + state.craftXp + '%"></i></div><p>Finished items enter Inventory. If storage fills unexpectedly, completed work remains safely at the Workshop.</p></aside>');
   }
 
   function facilityPanel(key) {
@@ -460,24 +474,12 @@
     return '<' + tag + ' class="inventory-item-card' + selected + '"' + action + '><span class="item-icon">⚔</span><span class="item-card-copy"><span class="label">' + (item.rarity || 'Common') + ' ' + SLOT_LABELS[item.slot].toLowerCase() + ' weapon</span><strong>' + item.name + '</strong><span>Attack +' + item.attack + ' · ' + itemRoles(item) + '</span></span></' + tag + '>';
   }
 
-  function equipmentPicker(heroKey, slot) {
-    if (!slot || state.equipmentSlot !== slot) return '';
-    var current = equippedItem(heroKey, slot);
-    var compatible = state.inventory.filter(function (item) { return itemCompatible(item, heroKey, slot); });
-    var items = compatible.length ? compatible.map(function (item) {
-      return '<article class="picker-item">' + itemCard(item) + '<button class="primary small-button" data-action="equip-item" data-item-id="' + item.id + '" data-hero="' + heroKey + '" data-tutorial-target="equip-sword">Equip</button></article>';
-    }).join('') : '<p class="picker-empty">No compatible ' + SLOT_LABELS[slot].toLowerCase() + ' items are in company inventory.</p>';
-    return '<aside class="slot-picker"><header><div><span class="label">Choose equipment</span><h3>' + SLOT_LABELS[slot] + '</h3></div><button class="secondary small-button" data-action="close-equipment-picker">Close</button></header>' +
-      (current ? '<div class="current-equipment"><span>Currently equipped</span><strong>' + current.name + '</strong><button class="secondary small-button" data-action="unequip-item" data-hero="' + heroKey + '" data-slot="' + slot + '">Unequip</button></div>' : '') +
-      '<div class="picker-grid">' + items + '</div></aside>';
-  }
-
   function characterSheet(key) {
     var hero = E.HEROES[key], ui = HERO_UI[key], condition = state.heroes[key], stats = effectiveHeroStats(key);
     return '<section class="character-sheet"><header><span class="portrait large ' + ui.colour + '">' + ui.initials + '</span>' + heroIdentity(key, false) + '<div class="combat-tags"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical' : 'Physical') + '</span></div></header><div class="sheet-columns"><section><span class="label">Condition</span>' + meter('Health', condition.health, 'health') + meter('Mana', condition.mana, 'mana') + meter('Readiness', condition.readiness, 'ready') + '<div class="xp-line"><span>Experience</span><strong>' + condition.xp + ' XP</strong></div><span class="label sheet-label">Combat statistics</span><div class="full-stats"><span>' + infoTerm('Attack', STAT_INFO.attack) + '<b>' + stats.attack + '</b></span><span>' + infoTerm('Armour', STAT_INFO.armour) + '<b>' + stats.armour + '</b></span><span>' + infoTerm('Ward', STAT_INFO.ward) + '<b>' + stats.ward + '</b></span><span>' + infoTerm('Speed', STAT_INFO.speed) + '<b>' + stats.speed + '</b></span><span>' + infoTerm('Accuracy', STAT_INFO.accuracy) + '<b>' + stats.accuracy + '%</b></span><span>' + infoTerm('Critical', STAT_INFO.critical) + '<b>' + stats.critical + '%</b></span></div><article class="trait-detail"><span class="label">Traits</span><strong>' + infoTerm(hero.trait, E.TRAITS[hero.trait]) + '</strong><p>' + E.TRAITS[hero.trait] + '</p></article></section><section><span class="label">Equipment</span><div class="equipment-grid">' + Object.keys(SLOT_LABELS).map(function (slot) {
       var item = equippedItem(key, slot);
-      return '<button class="equipment-slot ' + (item ? 'filled ' : '') + (state.equipmentSlot === slot ? 'selected' : '') + '" data-action="open-equipment-slot" data-slot="' + slot + '" data-hero="' + key + '"' + (slot === 'mainHand' ? ' data-tutorial-target="main-hand-slot"' : '') + '><span>' + SLOT_LABELS[slot] + '</span><strong>' + (item ? item.name : 'Empty') + '</strong>' + (item ? '<em>Attack +' + item.attack + '</em>' : '<em>Choose item</em>') + '</button>';
-    }).join('') + '</div>' + equipmentPicker(key, state.equipmentSlot) + '</section></div></section>';
+      return '<button class="equipment-slot ' + (item ? 'filled ' : '') + '" data-action="open-equipment-slot" data-slot="' + slot + '" data-hero="' + key + '"' + (slot === 'mainHand' ? ' data-tutorial-target="main-hand-slot"' : '') + '><span>' + SLOT_LABELS[slot] + '</span><strong>' + (item ? item.name : 'Empty') + '</strong>' + (item ? '<em>Attack +' + item.attack + '</em>' : '<em>Choose item</em>') + '</button>';
+    }).join('') + '</div></section></div></section>';
   }
 
   function roster() {
@@ -485,10 +487,23 @@
   }
 
   function inventory() {
-    var items = state.inventory;
+    var choosing = Boolean(state.equipmentSlot && state.selectedHero);
+    var heroKey = state.selectedHero;
+    var slot = state.equipmentSlot;
+    var compatible = choosing ? state.inventory.filter(function (item) { return itemCompatible(item, heroKey, slot); }) : state.inventory;
+    var incompatible = choosing ? state.inventory.filter(function (item) { return !itemCompatible(item, heroKey, slot); }) : [];
+    var items = choosing && !state.showIncompatibleItems ? compatible : state.inventory;
     var selected = items.find(function (item) { return item.id === state.selectedInventoryItem; }) || items[0];
-    var detail = selected ? '<aside class="inventory-detail"><span class="item-icon">⚔</span><span class="label">' + selected.rarity + ' equipment</span><h2>' + selected.name + '</h2><dl><div><dt>Slot</dt><dd>' + SLOT_LABELS[selected.slot] + '</dd></div><div><dt>Attack</dt><dd>+' + selected.attack + '</dd></div><div><dt>Usable by</dt><dd>' + itemRoles(selected) + '</dd></div><div><dt>Source</dt><dd>' + selected.source + '</dd></div></dl><p>Equipment changes are made from the relevant hero’s character sheet.</p></aside>' : '';
-    return heading('Company stores', 'Inventory', 'Browse the equipment owned by the company. Equip it through a hero’s character sheet.') + '<section class="inventory-panel"><div class="section-heading"><h2>Equipment</h2><span>' + items.length + ' stored</span></div>' + (items.length ? '<div class="inventory-layout"><div class="inventory-grid">' + items.map(function (item) { return itemCard(item, { selectable: true, selected: selected && selected.id === item.id }); }).join('') + '</div>' + detail + '</div>' : '<div class="empty-state"><h3>The stores are empty</h3><p>Visit the Workshop in Town to forge equipment.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></div>') + '</section>';
+    var selectedCompatible = selected && (!choosing || itemCompatible(selected, heroKey, slot));
+    var dismantleConfirm = selected && state.pendingDismantleId === selected.id;
+    var actions = selected ? (choosing ? '<button class="primary" data-action="equip-item" data-item-id="' + selected.id + '" data-hero="' + heroKey + '" data-tutorial-target="equip-sword" ' + (!selectedCompatible ? 'disabled' : '') + '>Equip ' + E.HEROES[heroKey].name.split(' ')[0] + '</button>' : dismantleConfirm ? '<div class="dismantle-confirm"><p>Dismantle this item for 1 scrap? This cannot be undone.</p><button class="danger-button" data-action="confirm-dismantle" data-item-id="' + selected.id + '">Dismantle item</button><button class="secondary" data-action="cancel-dismantle">Keep item</button></div>' : '<button class="secondary" data-action="request-dismantle" data-item-id="' + selected.id + '">Dismantle for 1 scrap</button>') : '';
+    var detail = selected ? '<aside class="inventory-detail"><span class="item-icon">⚔</span><span class="label">' + selected.rarity + ' equipment</span><h2>' + selected.name + '</h2><dl><div><dt>Slot</dt><dd>' + SLOT_LABELS[selected.slot] + '</dd></div><div><dt>Attack</dt><dd>+' + selected.attack + '</dd></div><div><dt>Usable by</dt><dd>' + itemRoles(selected) + '</dd></div><div><dt>Source</dt><dd>' + selected.source + '</dd></div></dl>' + actions + '</aside>' : (!choosing ? '<aside class="inventory-detail empty-detail"><span class="label">Company stores</span><h2>No equipment stored</h2><p>Forge equipment at the Workshop, then return here to inspect or dismantle it.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></aside>' : '');
+    var current = choosing ? equippedItem(heroKey, slot) : null;
+    var chooser = choosing ? '<header class="equipment-choice-header"><div><span class="eyebrow">Equipping ' + E.HEROES[heroKey].name + '</span><h1>Choose ' + SLOT_LABELS[slot] + '</h1><p>Showing equipment compatible with this hero and slot.</p></div><button class="secondary" data-action="cancel-equipment-choice">Cancel</button></header>' + (current ? '<div class="current-equipment"><span>Currently equipped</span><strong>' + current.name + '</strong><button class="secondary small-button" data-action="unequip-item" data-hero="' + heroKey + '" data-slot="' + slot + '" ' + (inventoryFull() ? 'disabled' : '') + '>Unequip</button></div>' : '') + (incompatible.length ? '<button class="filter-toggle" data-action="toggle-incompatible">' + (state.showIncompatibleItems ? 'Hide' : 'Show') + ' ' + incompatible.length + ' incompatible item' + (incompatible.length === 1 ? '' : 's') + '</button>' : '') : heading('Company stores', 'Inventory', 'Browse company equipment. To equip an item, begin from a hero’s equipment slot in the Roster.');
+    var cells = items.map(function (item) { return itemCard(item, { selectable: true, selected: selected && selected.id === item.id }); }).join('');
+    if (!choosing) for (var empty = state.inventory.length; empty < state.inventoryCapacity; empty += 1) cells += '<div class="inventory-empty-slot"><span>Empty</span></div>';
+    var emptyCopy = choosing ? '<div class="empty-state"><h3>No compatible equipment</h3><p>There are no ' + SLOT_LABELS[slot].toLowerCase() + ' items that ' + E.HEROES[heroKey].name + ' can use.</p></div>' : '<div class="empty-state"><h3>The stores are empty</h3><p>Visit the Workshop in Town to forge equipment.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></div>';
+    return chooser + '<section class="inventory-panel"><div class="section-heading"><h2>' + (choosing ? 'Compatible equipment' : 'Equipment stores') + '</h2><span class="capacity-count ' + (inventoryFull() ? 'full' : '') + '">' + state.inventory.length + '/' + state.inventoryCapacity + ' occupied</span></div>' + (items.length || !choosing ? '<div class="inventory-layout"><div class="inventory-slot-grid">' + cells + '</div>' + detail + '</div>' : emptyCopy) + '</section>';
   }
 
   function mainView() {
@@ -510,8 +525,8 @@
       forge: { title: 'Forge an Iron Sword', copy: 'This is an ordinary craft. The item will enter company inventory.' },
       crafting: { title: 'The forge is working', copy: 'The timer continues while the game is closed. The next step will appear when the sword is ready.' },
       'open-roster': { title: 'Open the Roster', copy: 'Equipment is fitted from a hero’s normal character sheet.' },
-      'open-main-hand': { title: 'Choose an equipment slot', copy: 'Open Elara’s Main hand slot to see suitable items in company inventory.' },
-      'equip-sword': { title: 'Equip Elara', copy: 'Choose the Iron Sword for Elara’s Main hand.' },
+      'open-main-hand': { title: 'Choose an equipment slot', copy: 'Open Elara’s Main hand slot to filter company inventory to suitable items.' },
+      'equip-sword': { title: 'Equip Elara', copy: 'The Inventory is filtered for Elara’s Main hand. Equip the Iron Sword.' },
       'town-tavern': { title: 'Open the Tavern', copy: 'Orin needs time to recover. The Tavern has two configurable recovery slots.' },
       'assign-orin': { title: 'Assign Orin', copy: 'Orin is selected in the roster. Choose this slot, or drag Orin here from the right.' },
       'expeditions-next': { title: 'Keep the company working', copy: 'Orin is unavailable, but any remaining combination of heroes can take the next expedition.' }
@@ -525,7 +540,7 @@
     var resourceControls = ['gold', 'scrap', 'herbs'].map(function (resource) {
       return '<div class="admin-resource"><label for="resource-' + resource + '">' + resource.charAt(0).toUpperCase() + resource.slice(1) + '</label><input id="resource-' + resource + '" type="number" min="0" step="1" value="10"><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="add">Add</button><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="set">Set</button></div>';
     }).join('');
-    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>Primary resources</h3><div class="admin-resources">' + resourceControls + '</div><hr><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
+    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>Primary resources</h3><div class="admin-resources">' + resourceControls + '</div><hr><h3>Inventory capacity</h3><div class="admin-capacity"><input id="inventory-capacity" type="number" min="12" max="60" step="1" value="' + state.inventoryCapacity + '" aria-label="Inventory capacity"><button class="secondary" data-action="set-inventory-capacity">Set capacity</button></div><hr><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
   }
 
   function tutorialTarget() {
@@ -565,7 +580,7 @@
     var app = document.getElementById('app');
     if (state.stage === 'intro') { app.innerHTML = intro(); bind(); return; }
     var notice = state.notice ? '<div class="notice">' + esc(state.notice) + '</div>' : '';
-    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.3.4</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
+    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.3.5</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
     bind(); applyTutorialSpotlight();
   }
 
@@ -589,12 +604,12 @@
   }
 
   function openView(view) {
-    var patch = { view: view, activeBuilding: null, notice: null, rosterOpen: false, equipmentSlot: null };
+    var patch = { view: view, activeBuilding: null, notice: null, rosterOpen: false, equipmentSlot: null, showIncompatibleItems: false, pendingDismantleId: null };
     if (state.tutorial === 'town-expeditions' && view === 'expeditions') patch.tutorial = 'expedition-prepare';
     if (state.tutorial === 'return-town-workshop' && view === 'town') patch.tutorial = 'town-workshop';
     if (state.tutorial === 'open-roster' && view === 'roster') { patch.tutorial = 'open-main-hand'; patch.selectedHero = 'elara'; }
     if (state.tutorial === 'expeditions-next' && view === 'expeditions') patch.tutorial = null;
-    if (view === 'inventory' && state.completedActivity && state.completedActivity.type === 'craft') patch.completedActivity = null;
+    if (view === 'inventory' && !state.workshopOutput && state.completedActivity && state.completedActivity.type === 'craft') patch.completedActivity = null;
     set(patch);
   }
 
@@ -639,7 +654,7 @@
     if (!itemCompatible(item, hero, item.slot)) return;
     if (equipment[item.slot]) state.inventory.push(equipment[item.slot]);
     equipment[item.slot] = item; state.equipment[hero] = equipment; state.inventory.splice(index, 1);
-    var patch = { notice: item.name + ' equipped by ' + E.HEROES[hero].name + '.', equipmentSlot: null, completedActivity: null };
+    var patch = { view: 'roster', notice: item.name + ' equipped by ' + E.HEROES[hero].name + '.', equipmentSlot: null, selectedInventoryItem: null, showIncompatibleItems: false, completedActivity: null };
     if (state.tutorial === 'equip-sword') { patch.view = 'town'; patch.tutorial = 'town-tavern'; patch.activeBuilding = null; }
     set(patch);
   }
@@ -659,24 +674,42 @@
     if (action === 'close-building') set({ activeBuilding: null });
     if (action === 'open-building' && data.building) openBuilding(data.building);
     if (action === 'assign-facility') assignFacility(state.selectedHero, data.facility, Number(data.slot));
-    if (action === 'craft' && !state.activities.craft && state.gold >= 15 && state.scrap >= 3) {
+    if (action === 'craft' && !state.activities.craft && !state.workshopOutput && !inventoryFull() && state.gold >= 15 && state.scrap >= 3) {
       state.gold -= 15; state.scrap -= 3;
       var craftDuration = state.tutorial === 'forge' ? 10 : 30;
       state.activities.craft = { type: 'craft', title: 'Iron Sword', startedAt: Date.now(), endsAt: Date.now() + craftDuration * 1000, duration: craftDuration };
       set({ tutorial: state.tutorial === 'forge' ? 'crafting' : state.tutorial, notice: null, completedActivity: null });
     }
-    if (action === 'open-equipment-slot' && data.hero && data.slot) set({ selectedHero: data.hero, equipmentSlot: data.slot, tutorial: state.tutorial === 'open-main-hand' && data.slot === 'mainHand' ? 'equip-sword' : state.tutorial });
-    if (action === 'close-equipment-picker') set({ equipmentSlot: null });
+    if (action === 'open-equipment-slot' && data.hero && data.slot) {
+      var firstCompatible = state.inventory.find(function (item) { return itemCompatible(item, data.hero, data.slot); });
+      set({ view: 'inventory', selectedHero: data.hero, equipmentSlot: data.slot, selectedInventoryItem: firstCompatible ? firstCompatible.id : null, showIncompatibleItems: false, pendingDismantleId: null, tutorial: state.tutorial === 'open-main-hand' && data.slot === 'mainHand' ? 'equip-sword' : state.tutorial });
+    }
+    if (action === 'cancel-equipment-choice') set({ view: 'roster', equipmentSlot: null, selectedInventoryItem: null, showIncompatibleItems: false });
+    if (action === 'toggle-incompatible') set({ showIncompatibleItems: !state.showIncompatibleItems, selectedInventoryItem: null });
     if (action === 'equip-item') equipItem(data.hero, data.itemId);
     if (action === 'unequip-item' && data.hero && data.slot) {
       var worn = state.equipment[data.hero][data.slot];
-      if (worn) { state.inventory.push(worn); state.equipment[data.hero][data.slot] = null; set({ equipmentSlot: data.slot, notice: worn.name + ' returned to company inventory.' }); }
+      if (worn && !inventoryFull()) { state.inventory.push(worn); state.equipment[data.hero][data.slot] = null; set({ equipmentSlot: data.slot, notice: worn.name + ' returned to company inventory.' }); }
     }
-    if (action === 'select-inventory-item') set({ selectedInventoryItem: data.itemId });
+    if (action === 'select-inventory-item') set({ selectedInventoryItem: data.itemId, pendingDismantleId: null });
+    if (action === 'request-dismantle' && data.itemId) set({ pendingDismantleId: data.itemId });
+    if (action === 'cancel-dismantle') set({ pendingDismantleId: null });
+    if (action === 'confirm-dismantle' && data.itemId && state.pendingDismantleId === data.itemId) {
+      var dismantleIndex = state.inventory.findIndex(function (item) { return item.id === data.itemId; });
+      if (dismantleIndex >= 0) {
+        var dismantled = state.inventory[dismantleIndex];
+        state.inventory.splice(dismantleIndex, 1); state.scrap += 1;
+        set({ selectedInventoryItem: null, pendingDismantleId: null, notice: dismantled.name + ' dismantled. 1 scrap recovered.' });
+      }
+    }
+    if (action === 'store-workshop-output' && state.workshopOutput && !inventoryFull()) {
+      state.inventory.push(state.workshopOutput); state.workshopOutput = null;
+      set({ completedActivity: null, notice: 'The finished item has been stored in company inventory.' });
+    }
     if (action === 'open-activity') {
       if (data.activity === 'expedition') set({ view: 'expeditions', expeditionScreen: state.activities.expedition ? 'active' : state.expeditionScreen, activeBuilding: null });
       if (data.activity === 'craft') set({ view: 'town', activeBuilding: 'workshop' });
-      if (data.activity === 'craft-ready') set({ view: 'inventory', activeBuilding: null, completedActivity: null });
+      if (data.activity === 'craft-ready') set(state.workshopOutput ? { view: 'town', activeBuilding: 'workshop' } : { view: 'inventory', activeBuilding: null, completedActivity: null });
     }
     if (action === 'skip-tutorial') set({ tutorial: null, tutorialSkipped: true });
     if (action === 'dev') set({ devOpen: !state.devOpen });
@@ -689,6 +722,12 @@
         resourcePatch.notice = data.resource.charAt(0).toUpperCase() + data.resource.slice(1) + ' adjusted by administrative control.';
         set(resourcePatch);
       }
+    }
+    if (action === 'set-inventory-capacity') {
+      var capacityInput = document.getElementById('inventory-capacity');
+      var capacity = capacityInput ? Math.floor(Number(capacityInput.value)) : NaN;
+      if (Number.isFinite(capacity) && capacity >= DEFAULT_INVENTORY_CAPACITY && capacity <= 60 && capacity >= state.inventory.length) set({ inventoryCapacity: capacity, notice: 'Inventory capacity set to ' + capacity + ' slots.' });
+      else set({ notice: 'Capacity must be between 12 and 60 and cannot be below the number of stored items.' });
     }
     if (action === 'skip-timers') {
       if (state.activities.expedition) state.activities.expedition.endsAt = Date.now();

@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.3.4
+## Prototype 0.3.5
 
 The current slice covers:
 
@@ -21,6 +21,7 @@ The current slice covers:
 - current-condition combat forecasting and per-hero consequence summaries
 - real Craft XP progression and guided recovery hand-offs
 - company Inventory and equipment management through a reusable character sheet
+- twelve-slot company storage, filtered equipment selection, dismantling and safe Workshop overflow
 - Armour, Ward, Accuracy and Critical combat statistics
 
 The game is deliberately data-led and low-animation. The current goal is to validate the Town, expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.

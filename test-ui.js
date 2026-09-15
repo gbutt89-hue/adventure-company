@@ -88,12 +88,14 @@ assert.match(roster, />Traits</);
 assert.doesNotMatch(roster, /title=/, 'Help terms must not trigger duplicate native tooltips');
 
 const equipment = renderState(playing({
-  view: 'roster',
+  view: 'inventory',
   equipmentSlot: 'mainHand',
   inventory: [{ id: 'test-sword', key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Test' }]
 }));
-assert.match(equipment, /Choose equipment/);
+assert.match(equipment, /Choose Main hand/);
+assert.match(equipment, /Showing equipment compatible with this hero and slot/);
 assert.match(equipment, /data-action="equip-item"/);
+assert.match(equipment, /data-action="cancel-equipment-choice"/);
 
 const preparation = renderState(playing({ view: 'expeditions', expeditionScreen: 'prepare' }));
 assert.match(preparation, />WARD</);
@@ -106,8 +108,21 @@ const inventory = renderState(playing({
 }));
 assert.match(inventory, /Usable by/);
 assert.match(inventory, /Forged in the Company Workshop/);
+assert.match(inventory, /1\/12 occupied/);
+assert.equal((inventory.match(/inventory-empty-slot/g) || []).length, 11);
+assert.match(inventory, /Dismantle for 1 scrap/);
 assert.doesNotMatch(inventory, /View Elara/);
 assert.doesNotMatch(inventory, /data-action="equip-item"/);
+
+const fullItems = Array.from({ length: 12 }, (_, index) => ({ id: 'sword-' + index, key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Test' }));
+const fullWorkshop = renderState(playing({ view: 'town', activeBuilding: 'workshop', gold: 999, scrap: 999, inventory: fullItems }));
+assert.match(fullWorkshop, /12\/12 inventory slots occupied/);
+assert.match(fullWorkshop, /data-action="craft"[^>]*disabled/);
+assert.match(fullWorkshop, /Manage Inventory/);
+
+const waitingWorkshop = renderState(playing({ view: 'town', activeBuilding: 'workshop', inventory: fullItems, workshopOutput: { id: 'waiting', key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4 } }));
+assert.match(waitingWorkshop, /remain safely here/);
+assert.match(waitingWorkshop, /data-action="store-workshop-output"[^>]*disabled/);
 
 const migrated = renderState({
   saveVersion: 2,
