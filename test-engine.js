@@ -17,6 +17,7 @@ assert.ok(forecastA.danger>=1&&forecastA.danger<=99);
 
 assert.equal(E.effectiveStats('elara',{readiness:100,swordEquipped:false}).armour,E.HEROES.elara.armour,'Displayed and simulated Armour must share one source');
 assert.equal(E.effectiveStats('orin',{readiness:100}).ward,E.HEROES.orin.ward,'Displayed Ward must share the combat data source');
+assert.equal(E.effectiveStats('fen',{readiness:100,weaponBonus:4}).attack,E.HEROES.fen.attack+4,'A compatible weapon bonus must apply to its actual wearer');
 assert.equal(E.HEROES.orin.combatStyle,'Caster','The Acolyte must be identified as a caster');
 assert.ok(E.effectiveStats('fen',{readiness:35}).speed<E.effectiveStats('fen',{readiness:100}).speed,'Low Readiness must reduce effective Speed');
 assert.equal(E.experienceGain('orin',20),25,'Studious must grant 25% additional expedition XP');

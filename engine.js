@@ -68,7 +68,7 @@
     if (!hero) return null;
     const settings = options || {};
     const modifier = readinessModifier(settings.readiness);
-    const weaponBonus = key === 'elara' && settings.swordEquipped ? 4 : 0;
+    const weaponBonus = settings.weaponBonus === undefined ? (key === 'elara' && settings.swordEquipped ? 4 : 0) : Number(settings.weaponBonus) || 0;
     return {
       attack: Math.max(1, Math.round((hero.attack + weaponBonus) * modifier)),
       armour: hero.armour,
@@ -89,6 +89,7 @@
     if (!party.length) return { success: false, invalid: true, log: [], heroes: {}, rounds: 0, potionUsed: false };
     const rng = randomFrom(options.seed);
     const sword = Boolean(options.swordEquipped);
+    const equipmentAttack = options.equipmentAttack || {};
     const heroStates = options.heroStates || {};
     const includeLog = options.includeLog !== false;
     const log = [];
@@ -97,7 +98,7 @@
       const healthPercent = clamp(condition.health === undefined ? 100 : condition.health, 1, 100);
       const mana = clamp(condition.mana === undefined ? 100 : condition.mana, 0, 100);
       const readiness = clamp(condition.readiness === undefined ? 100 : condition.readiness, 0, 100);
-      const stats = effectiveStats(key, { readiness, swordEquipped: sword });
+      const stats = effectiveStats(key, { readiness, swordEquipped: sword, weaponBonus: equipmentAttack[key] });
       const hp = Math.max(1, Math.round(HEROES[key].maxHealth * healthPercent / 100));
       return {
         key, side: 'hero', name: HEROES[key].name, hp, startingHp: hp,
@@ -229,6 +230,7 @@
       const result = simulateBattle({
         party,
         swordEquipped: options.swordEquipped,
+        equipmentAttack: options.equipmentAttack,
         heroStates: options.heroStates,
         seed: String(options.seed) + '|forecast|' + i,
         includeLog: false
@@ -249,7 +251,8 @@
   }
 
   function encounterSeed(saveSeed, runNumber, party, swordEquipped) {
-    return [saveSeed, 'abandoned-road', runNumber, party.slice().sort().join(','), swordEquipped ? 'iron' : 'training'].join('|');
+    const equipment = typeof swordEquipped === 'string' ? swordEquipped : swordEquipped ? 'iron' : 'training';
+    return [saveSeed, 'abandoned-road', runNumber, party.slice().sort().join(','), equipment].join('|');
   }
 
   return {

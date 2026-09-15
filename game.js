@@ -68,6 +68,7 @@
       selectedParty: ['elara', 'fen', 'orin'], selectedHero: 'elara', firstExpeditionComplete: false,
       tutorial: 'town-expeditions', tutorialSkipped: false, rosterOpen: false, devOpen: false, notice: null,
       currentResult: null, lastResult: null, resultContext: null, resultClaimed: false,
+      selectedInventoryItem: null, equipmentSlot: null, completedActivity: null,
       craftXp: 0, lastCraftXpGain: 0, nextItemId: 1, inventory: [],
       equipment: { elara: emptyEquipment(), fen: emptyEquipment(), orin: emptyEquipment() },
       activities: { expedition: null, craft: null, facilities: emptyFacilities() },
@@ -88,8 +89,8 @@
     if (old.heroes) next.heroes = Object.assign(next.heroes, old.heroes);
     if (old.companyName) next.stage = 'playing';
     next.firstExpeditionComplete = Boolean(old.swordCrafted || old.swordEquipped || old.runNumber > 0);
-    if (old.swordEquipped) next.equipment.elara.mainHand = { id: 'legacy-iron-sword', key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4 };
-    else if (old.swordCrafted) next.inventory.push({ id: 'legacy-iron-sword', key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4 });
+    if (old.swordEquipped) next.equipment.elara.mainHand = ironSword('legacy-iron-sword');
+    else if (old.swordCrafted) next.inventory.push(ironSword('legacy-iron-sword'));
     if (old.activities) {
       next.activities.expedition = old.activities.expedition || null;
       next.activities.craft = old.activities.craft || null;
@@ -119,6 +120,12 @@
       next.activities.facilities[key] = slots;
     });
     next.inventory = Array.isArray(next.inventory) ? next.inventory : [];
+    next.inventory = next.inventory.map(normaliseItem);
+    Object.keys(E.HEROES).forEach(function (key) {
+      Object.keys(next.equipment[key]).forEach(function (slot) {
+        if (next.equipment[key][slot]) next.equipment[key][slot] = normaliseItem(next.equipment[key][slot]);
+      });
+    });
     next.selectedParty = Array.isArray(next.selectedParty) ? next.selectedParty : ['elara', 'fen', 'orin'];
     return next;
   }
@@ -137,6 +144,16 @@
 
   var state = load();
 
+  function ironSword(id) {
+    return { id: id, key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Forged in the Company Workshop' };
+  }
+
+  function normaliseItem(item) {
+    if (!item) return item;
+    if (item.key === 'iron-sword') return Object.assign(ironSword(item.id), item, { allowedRoles: item.allowedRoles || ['Vanguard', 'Ranger'] });
+    return item;
+  }
+
   function save() { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }
   function esc(value) { return String(value).replace(/[&<>'"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]; }); }
   function set(patch) { state = normalise(Object.assign({}, state, patch)); save(); render(); }
@@ -144,7 +161,13 @@
   function timeText(total) { return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0'); }
   function activityProgress(activity) { return activity ? Math.max(0, Math.min(100, (1 - remaining(activity) / activity.duration) * 100)) : 0; }
   function hasIronSword(key) { return Boolean(state.equipment[key] && state.equipment[key].mainHand && state.equipment[key].mainHand.key === 'iron-sword'); }
-  function effectiveHeroStats(key) { return E.effectiveStats(key, { readiness: state.heroes[key].readiness, swordEquipped: key === 'elara' && hasIronSword('elara') }); }
+  function equipmentAttack() {
+    var bonuses = {};
+    Object.keys(E.HEROES).forEach(function (key) { bonuses[key] = Object.keys(state.equipment[key]).reduce(function (total, slot) { return total + Number(state.equipment[key][slot] && state.equipment[key][slot].attack || 0); }, 0); });
+    return bonuses;
+  }
+  function equipmentSignature() { var bonuses = equipmentAttack(); return Object.keys(bonuses).sort().map(function (key) { return key + ':' + bonuses[key]; }).join(','); }
+  function effectiveHeroStats(key) { return E.effectiveStats(key, { readiness: state.heroes[key].readiness, weaponBonus: equipmentAttack()[key] }); }
 
   function allFacilityActivities() {
     var list = [];
@@ -166,7 +189,7 @@
   function heroBusy(key) { return Boolean(heroActivity(key)); }
 
   function forecast() {
-    return E.forecast({ party: state.selectedParty, heroStates: state.heroes, seed: state.seed, swordEquipped: hasIronSword('elara'), samples: 400 });
+    return E.forecast({ party: state.selectedParty, heroStates: state.heroes, seed: state.seed, equipmentAttack: equipmentAttack(), samples: 400 });
   }
 
   function completeActivities() {
@@ -175,7 +198,7 @@
     var expedition = state.activities.expedition;
     if (expedition && expedition.endsAt <= now) {
       var beforeStates = expedition.heroStates || state.heroes;
-      var result = E.simulateBattle({ party: expedition.party, heroStates: beforeStates, swordEquipped: expedition.swordEquipped, seed: expedition.seed, includeLog: true });
+      var result = E.simulateBattle({ party: expedition.party, heroStates: beforeStates, swordEquipped: expedition.swordEquipped, equipmentAttack: expedition.equipmentAttack, seed: expedition.seed, includeLog: true });
       if (expedition.context === 'first') result.rewards.scrap = Math.max(3, result.rewards.scrap);
       result.changes = {};
       expedition.party.forEach(function (key) {
@@ -191,7 +214,7 @@
         state.heroes[key] = hero;
       });
       state.currentResult = result;
-      state.lastResult = { inputs: { party: expedition.party, swordEquipped: expedition.swordEquipped, seed: expedition.seed }, result: result };
+      state.lastResult = { inputs: { party: expedition.party, swordEquipped: expedition.swordEquipped, equipmentAttack: expedition.equipmentAttack, seed: expedition.seed }, result: result };
       state.resultContext = expedition.context;
       state.resultClaimed = false;
       state.activities.expedition = null;
@@ -203,11 +226,12 @@
     var craft = state.activities.craft;
     if (craft && craft.endsAt <= now) {
       state.activities.craft = null;
-      state.inventory.push({ id: 'item-' + state.nextItemId, key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4 });
+      state.inventory.push(ironSword('item-' + state.nextItemId));
       state.nextItemId += 1;
       state.craftXp = Math.min(100, state.craftXp + 18);
       state.lastCraftXpGain = 18;
       state.notice = 'The Iron Sword is ready and has been placed in company inventory.';
+      state.completedActivity = { type: 'craft', label: 'Workshop: item ready' };
       if (!state.tutorialSkipped && state.tutorial === 'crafting') state.tutorial = 'open-roster';
       changed = true;
     }
@@ -245,14 +269,19 @@
       var activity = heroActivity(element.dataset.heroTimer);
       if (activity) element.textContent = activity.title + ' ' + timeText(activity.remaining);
     });
+    document.querySelectorAll('[data-busy-hero]').forEach(function (element) {
+      var busyActivity = heroActivity(element.dataset.busyHero);
+      if (busyActivity) element.textContent = E.HEROES[element.dataset.busyHero].name + ' · ' + busyActivity.title + ' ' + timeText(busyActivity.remaining);
+    });
+    document.querySelectorAll('[data-activity-countdown]').forEach(function (element) {
+      var activityKey = element.dataset.activityCountdown;
+      var activeActivity = activityKey === 'expedition' ? state.activities.expedition : state.activities.craft;
+      if (activeActivity) element.textContent = timeText(remaining(activeActivity));
+    });
   }
 
   function infoTerm(label, description) {
-    return '<button type="button" class="info-term" data-info-label="' + esc(label) + '" data-info-copy="' + esc(description) + '">' + esc(label) + '</button>';
-  }
-
-  function helpPanel() {
-    return '<aside class="context-help" aria-live="polite"><span class="label">Help</span><strong id="context-help-title">Select an underlined term</strong><p id="context-help-copy">Its meaning and exact effect will appear here.</p></aside>';
+    return '<span class="info-wrap"><button type="button" class="info-term" aria-label="' + esc(label + ': ' + description) + '">' + esc(label) + '</button><span class="info-popover" role="tooltip"><strong>' + esc(label) + '</strong><span>' + esc(description) + '</span></span></span>';
   }
 
   function meter(name, value, kind) {
@@ -292,10 +321,17 @@
       }).join('') + '<p class="rail-hint">Select a hero, or drag an available hero into a facility slot.</p></aside>';
   }
 
+  function activityStrip() {
+    var chips = [];
+    if (state.activities.expedition) chips.push('<button data-action="open-activity" data-activity="expedition"><span>Expedition</span><strong data-activity-countdown="expedition">' + timeText(remaining(state.activities.expedition)) + '</strong></button>');
+    if (state.activities.craft) chips.push('<button data-action="open-activity" data-activity="craft"><span>Workshop</span><strong data-activity-countdown="craft">' + timeText(remaining(state.activities.craft)) + '</strong></button>');
+    if (state.completedActivity && state.completedActivity.type === 'craft') chips.push('<button class="ready" data-action="open-activity" data-activity="craft-ready"><span>Workshop</span><strong>Item ready</strong></button>');
+    return chips.length ? '<div class="activity-strip" aria-label="Company activities">' + chips.join('') + '</div>' : '';
+  }
+
   function resources() {
-    var timers = (state.activities.expedition ? 1 : 0) + (state.activities.craft ? 1 : 0) + allFacilityActivities().length;
     return '<div class="resources"><span><b>' + state.gold + '</b> Gold</span><span><b>' + state.scrap + '</b> Scrap</span><span><b>' + state.herbs + '</b> Herbs</span>' +
-      (timers ? '<span class="active-timers"><b>' + timers + '</b> active</span>' : '') + (installPrompt ? '<button class="install-button" data-action="install">Install</button>' : '') + '</div>';
+      (installPrompt ? '<button class="install-button" data-action="install">Install</button>' : '') + '</div>';
   }
 
   function navigation() {
@@ -338,8 +374,11 @@
       return '<article class="facility-slot occupied"><span class="slot-number">Slot ' + (index + 1) + '</span><div class="slot-hero"><span class="portrait ' + HERO_UI[activity.hero].colour + '">' + HERO_UI[activity.hero].initials + '</span>' + heroIdentity(activity.hero, true) + '</div><strong>' + activity.title + '</strong><div class="timer small" data-facility-countdown="' + facilityKey + ':' + index + '">' + timeText(remaining(activity)) + '</div><div class="projected-condition">Expected: ' + effectText(activity.effects) + '</div></article>';
     }
     var selected = state.selectedHero;
-    var unavailable = !selected || heroBusy(selected) || state.gold < facility.cost;
-    return '<article class="facility-slot empty" data-drop-facility="' + facilityKey + '" data-drop-slot="' + index + '" data-tutorial-target="facility-slot-' + index + '"><span class="slot-number">Slot ' + (index + 1) + '</span><div class="empty-slot-mark">+</div><strong>' + (selected ? 'Assign ' + E.HEROES[selected].name : 'Select a hero') + '</strong><span>' + facility.activity + ' · ' + facility.cost + ' gold · ' + facility.duration + ' sec</span><button class="secondary" data-action="assign-facility" data-facility="' + facilityKey + '" data-slot="' + index + '" ' + (unavailable ? 'disabled' : '') + '>Place selected hero</button></article>';
+    var selectedActivity = selected ? heroActivity(selected) : null;
+    var unavailable = !selected || Boolean(selectedActivity) || state.gold < facility.cost;
+    var slotTitle = !selected ? 'Select a hero' : selectedActivity ? 'Selected hero is busy' : 'Assign ' + E.HEROES[selected].name;
+    var slotCopy = selectedActivity ? E.HEROES[selected].name + ' · ' + selectedActivity.title + ' ' + timeText(selectedActivity.remaining) : facility.activity + ' · ' + facility.cost + ' gold · ' + facility.duration + ' sec';
+    return '<article class="facility-slot empty" data-drop-facility="' + facilityKey + '" data-drop-slot="' + index + '" data-tutorial-target="facility-slot-' + index + '"><span class="slot-number">Slot ' + (index + 1) + '</span><div class="empty-slot-mark">+</div><strong>' + slotTitle + '</strong><span' + (selectedActivity ? ' data-busy-hero="' + selected + '"' : '') + '>' + slotCopy + '</span><button class="secondary" data-action="assign-facility" data-facility="' + facilityKey + '" data-slot="' + index + '" ' + (unavailable ? 'disabled' : '') + '>Place selected hero</button></article>';
   }
 
   function facilityFrame(key, content) {
@@ -349,8 +388,9 @@
 
   function workshopPanel() {
     var craft = state.activities.craft;
+    var duration = state.tutorial === 'forge' ? 10 : 30;
     var body = craft ? '<article class="craft-card"><div class="item-icon">⚔</div><div><span class="label">In progress</span><h3>Iron Sword</h3><div class="timer small" data-countdown-key="craft">' + timeText(remaining(craft)) + '</div><div class="progress"><i data-progress-key="craft" style="width:' + activityProgress(craft) + '%"></i></div></div></article>' :
-      '<article class="craft-card"><div class="item-icon">⚔</div><div><span class="label">Common main-hand weapon</span><h3>Iron Sword</h3><p>Attack +4. Suitable for a Vanguard.</p><div class="costs"><span>15 gold</span><span>3 scrap</span><span>30 sec</span><span>+18 Craft XP</span></div><button class="primary" data-action="craft" data-tutorial-target="forge" ' + (state.gold < 15 || state.scrap < 3 ? 'disabled' : '') + '>Forge</button></div></article>';
+      '<article class="craft-card"><div class="item-icon">⚔</div><div><span class="label">Common main-hand weapon</span><h3>Iron Sword</h3><p>Attack +4. Usable by a Vanguard or Ranger.</p><div class="costs"><span>15 gold</span><span>3 scrap</span><span>' + duration + ' sec</span><span>+18 Craft XP</span></div><button class="primary" data-action="craft" data-tutorial-target="forge" ' + (state.gold < 15 || state.scrap < 3 ? 'disabled' : '') + '>Forge</button></div></article>';
     return facilityFrame('workshop', body + '<aside class="workshop-level"><span class="label">Crafting level 1</span><strong>' + state.craftXp + ' / 100 Craft XP</strong><div class="progress"><i style="width:' + state.craftXp + '%"></i></div><p>Finished items enter Inventory. Equipment is managed from a hero’s character sheet.</p></aside>');
   }
 
@@ -372,13 +412,13 @@
   function preparation() {
     var result = forecast();
     var danger = result ? '<aside class="danger-panel"><span class="label">Predicted danger</span><strong class="danger-value">' + result.danger + '%</strong><div class="risk"><i style="width:' + result.danger + '%"></i></div><h3>' + (result.danger <= 20 ? 'Comfortable' : result.danger <= 45 ? 'Manageable' : 'Risky') + '</h3><dl><div><dt>Success</dt><dd>' + result.successChance + '%</dd></div><div><dt>Injury</dt><dd>' + result.injuryChance + '%</dd></div><div><dt>Expected health loss</dt><dd>' + result.expectedHealthLoss + '%</dd></div></dl><button class="primary" data-action="send-expedition" data-tutorial-target="send-expedition">Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>' : '<aside class="danger-panel empty"><span class="label">Predicted danger</span><strong class="danger-value">—</strong><h3>No party selected</h3><p>Select at least one available hero.</p><button class="primary" disabled>Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>';
-    return heading('Expedition preparation', 'Abandoned Road', 'The forecast runs 400 seeded simulations using current condition and equipment.') + '<div class="preparation-grid"><section><div class="section-heading"><h2>Your party</h2><span>' + state.selectedParty.length + '/3 selected</span></div><div class="hero-grid">' + Object.keys(E.HEROES).map(function (key) { return heroCompact(key, { selectable: true }); }).join('') + '</div>' + helpPanel() + '</section>' + danger + '</div>';
+    return heading('Expedition preparation', 'Abandoned Road', 'The forecast runs 400 seeded simulations using current condition and equipment.') + '<div class="preparation-grid"><section><div class="section-heading"><h2>Your party</h2><span>' + state.selectedParty.length + '/3 selected</span></div><div class="hero-grid">' + Object.keys(E.HEROES).map(function (key) { return heroCompact(key, { selectable: true }); }).join('') + '</div></section>' + danger + '</div>';
   }
 
   function activeExpedition() {
     var activity = state.activities.expedition;
     if (!activity) return expeditionList();
-    return heading('Expedition under way', 'The party is on the road', 'The encounter was fixed by its seed when the party departed. You may safely close the game.') + '<section class="timer-card"><span class="label">Time remaining</span><div class="timer" data-countdown-key="expedition">' + timeText(remaining(activity)) + '</div><div class="progress"><i data-progress-key="expedition" style="width:' + activityProgress(activity) + '%"></i></div><div class="party-portraits">' + activity.party.map(function (key) { return '<span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span>'; }).join('') + '</div><p>Seed ' + esc(activity.seed) + ' · Combat resolves automatically.</p></section>';
+    return heading('Expedition under way', 'The party is on the road', 'Your company is away. Progress continues if you leave this page.') + '<section class="timer-card active-expedition-card"><span class="label">Time remaining</span><div class="timer" data-countdown-key="expedition">' + timeText(remaining(activity)) + '</div><div class="progress"><i data-progress-key="expedition" style="width:' + activityProgress(activity) + '%"></i></div><div class="party-portraits">' + activity.party.map(function (key) { return '<span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span>'; }).join('') + '</div><p>The outcome will be ready when the timer ends.</p></section>';
   }
 
   function resultMeter(name, before, after, kind) {
@@ -397,7 +437,7 @@
     return heading('Expedition complete', result.success ? 'Road secured' : 'Company withdrawn', verdict) + '<section class="outcome-summary"><div><span class="label">Company outcome</span><h2>' + verdict + '</h2><p>' + result.rounds + ' combat rounds · ' + (result.potionUsed ? 'At least one Field Tonic was consumed.' : 'No Field Tonics were needed.') + '</p></div><aside><h3>Recovered</h3><div class="reward-strip"><span>' + result.rewards.gold + ' gold</span><span>' + result.rewards.scrap + ' scrap</span><span>' + result.rewards.herbs + ' herb</span><span>' + result.rewards.xp + ' base XP</span></div></aside></section><section class="results-panel"><div class="section-heading"><h2>Company condition</h2><span>Before → after</span></div><div class="hero-results">' + party.map(function (key) {
       var change = changes[key];
       return '<article><div class="result-hero-head"><span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span><div><h3>' + E.HEROES[key].name + '</h3><span>+' + change.xpGain + ' XP</span></div></div>' + resultMeter('Health', change.before.health, change.after.health, 'health') + resultMeter('Mana', change.before.mana, change.after.mana, 'mana') + resultMeter('Readiness', change.before.readiness, change.after.readiness, 'ready') + '</article>';
-    }).join('') + '</div>' + helpPanel() + resultAction + '</section><details class="encounter-log"><summary>Show encounter log <span>' + result.rounds + ' rounds · Seeded</span></summary><ol>' + result.log.map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>';
+    }).join('') + '</div>' + resultAction + '</section><details class="encounter-log"><summary>Show encounter log <span>' + result.rounds + ' rounds · Seeded</span></summary><ol>' + result.log.map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>';
   }
 
   function expeditions() {
@@ -409,15 +449,35 @@
 
   function equippedItem(key, slot) { return state.equipment[key] && state.equipment[key][slot]; }
 
+  function itemRoles(item) { return item.allowedRoles && item.allowedRoles.length ? item.allowedRoles.join(' or ') : 'Any class'; }
+  function itemCompatible(item, heroKey, slot) { return item.slot === slot && (!item.allowedRoles || item.allowedRoles.indexOf(E.HEROES[heroKey].role) >= 0); }
+
+  function itemCard(item, options) {
+    options = options || {};
+    var action = options.selectable ? ' data-action="select-inventory-item" data-item-id="' + item.id + '"' : '';
+    var selected = options.selected ? ' selected' : '';
+    var tag = options.selectable ? 'button' : 'div';
+    return '<' + tag + ' class="inventory-item-card' + selected + '"' + action + '><span class="item-icon">⚔</span><span class="item-card-copy"><span class="label">' + (item.rarity || 'Common') + ' ' + SLOT_LABELS[item.slot].toLowerCase() + ' weapon</span><strong>' + item.name + '</strong><span>Attack +' + item.attack + ' · ' + itemRoles(item) + '</span></span></' + tag + '>';
+  }
+
+  function equipmentPicker(heroKey, slot) {
+    if (!slot || state.equipmentSlot !== slot) return '';
+    var current = equippedItem(heroKey, slot);
+    var compatible = state.inventory.filter(function (item) { return itemCompatible(item, heroKey, slot); });
+    var items = compatible.length ? compatible.map(function (item) {
+      return '<article class="picker-item">' + itemCard(item) + '<button class="primary small-button" data-action="equip-item" data-item-id="' + item.id + '" data-hero="' + heroKey + '" data-tutorial-target="equip-sword">Equip</button></article>';
+    }).join('') : '<p class="picker-empty">No compatible ' + SLOT_LABELS[slot].toLowerCase() + ' items are in company inventory.</p>';
+    return '<aside class="slot-picker"><header><div><span class="label">Choose equipment</span><h3>' + SLOT_LABELS[slot] + '</h3></div><button class="secondary small-button" data-action="close-equipment-picker">Close</button></header>' +
+      (current ? '<div class="current-equipment"><span>Currently equipped</span><strong>' + current.name + '</strong><button class="secondary small-button" data-action="unequip-item" data-hero="' + heroKey + '" data-slot="' + slot + '">Unequip</button></div>' : '') +
+      '<div class="picker-grid">' + items + '</div></aside>';
+  }
+
   function characterSheet(key) {
     var hero = E.HEROES[key], ui = HERO_UI[key], condition = state.heroes[key], stats = effectiveHeroStats(key);
-    var compatible = state.inventory.filter(function (item) { return item.slot === 'mainHand'; });
-    return '<section class="character-sheet"><header><span class="portrait large ' + ui.colour + '">' + ui.initials + '</span>' + heroIdentity(key, false) + '<div class="combat-tags"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical' : 'Physical') + '</span></div></header><div class="sheet-columns"><section><span class="label">Condition</span>' + meter('Health', condition.health, 'health') + meter('Mana', condition.mana, 'mana') + meter('Readiness', condition.readiness, 'ready') + '<div class="xp-line"><span>Experience</span><strong>' + condition.xp + ' XP</strong></div><span class="label sheet-label">Combat statistics</span><div class="full-stats"><span>' + infoTerm('Attack', STAT_INFO.attack) + '<b>' + stats.attack + '</b></span><span>' + infoTerm('Armour', STAT_INFO.armour) + '<b>' + stats.armour + '</b></span><span>' + infoTerm('Ward', STAT_INFO.ward) + '<b>' + stats.ward + '</b></span><span>' + infoTerm('Speed', STAT_INFO.speed) + '<b>' + stats.speed + '</b></span><span>' + infoTerm('Accuracy', STAT_INFO.accuracy) + '<b>' + stats.accuracy + '%</b></span><span>' + infoTerm('Critical', STAT_INFO.critical) + '<b>' + stats.critical + '%</b></span></div><article class="trait-detail"><span class="label">Trait</span><strong>' + infoTerm(hero.trait, E.TRAITS[hero.trait]) + '</strong><p>' + E.TRAITS[hero.trait] + '</p></article></section><section><span class="label">Equipment</span><div class="equipment-grid">' + Object.keys(SLOT_LABELS).map(function (slot) {
+    return '<section class="character-sheet"><header><span class="portrait large ' + ui.colour + '">' + ui.initials + '</span>' + heroIdentity(key, false) + '<div class="combat-tags"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical' : 'Physical') + '</span></div></header><div class="sheet-columns"><section><span class="label">Condition</span>' + meter('Health', condition.health, 'health') + meter('Mana', condition.mana, 'mana') + meter('Readiness', condition.readiness, 'ready') + '<div class="xp-line"><span>Experience</span><strong>' + condition.xp + ' XP</strong></div><span class="label sheet-label">Combat statistics</span><div class="full-stats"><span>' + infoTerm('Attack', STAT_INFO.attack) + '<b>' + stats.attack + '</b></span><span>' + infoTerm('Armour', STAT_INFO.armour) + '<b>' + stats.armour + '</b></span><span>' + infoTerm('Ward', STAT_INFO.ward) + '<b>' + stats.ward + '</b></span><span>' + infoTerm('Speed', STAT_INFO.speed) + '<b>' + stats.speed + '</b></span><span>' + infoTerm('Accuracy', STAT_INFO.accuracy) + '<b>' + stats.accuracy + '%</b></span><span>' + infoTerm('Critical', STAT_INFO.critical) + '<b>' + stats.critical + '%</b></span></div><article class="trait-detail"><span class="label">Traits</span><strong>' + infoTerm(hero.trait, E.TRAITS[hero.trait]) + '</strong><p>' + E.TRAITS[hero.trait] + '</p></article></section><section><span class="label">Equipment</span><div class="equipment-grid">' + Object.keys(SLOT_LABELS).map(function (slot) {
       var item = equippedItem(key, slot);
-      return '<button class="equipment-slot ' + (item ? 'filled' : '') + '" disabled><span>' + SLOT_LABELS[slot] + '</span><strong>' + (item ? item.name : 'Empty') + '</strong>' + (item ? '<em>Attack +' + item.attack + '</em>' : '') + '</button>';
-    }).join('') + '</div><div class="sheet-inventory"><span class="label">Compatible inventory</span>' + (compatible.length ? compatible.map(function (item) {
-      return '<article><span class="item-icon small">⚔</span><div><strong>' + item.name + '</strong><span>Main hand · Attack +' + item.attack + '</span></div><button class="primary small-button" data-action="equip-item" data-item-id="' + item.id + '" data-hero="' + key + '" data-tutorial-target="equip-sword">Equip</button></article>';
-    }).join('') : '<p>No compatible items in inventory.</p>') + '</div></section></div>' + helpPanel() + '</section>';
+      return '<button class="equipment-slot ' + (item ? 'filled ' : '') + (state.equipmentSlot === slot ? 'selected' : '') + '" data-action="open-equipment-slot" data-slot="' + slot + '" data-hero="' + key + '"' + (slot === 'mainHand' ? ' data-tutorial-target="main-hand-slot"' : '') + '><span>' + SLOT_LABELS[slot] + '</span><strong>' + (item ? item.name : 'Empty') + '</strong>' + (item ? '<em>Attack +' + item.attack + '</em>' : '<em>Choose item</em>') + '</button>';
+    }).join('') + '</div>' + equipmentPicker(key, state.equipmentSlot) + '</section></div></section>';
   }
 
   function roster() {
@@ -426,7 +486,9 @@
 
   function inventory() {
     var items = state.inventory;
-    return heading('Company stores', 'Inventory', 'Crafted and recovered equipment is stored here. Equip it through the relevant hero’s character sheet.') + '<section class="inventory-panel"><div class="section-heading"><h2>Equipment</h2><span>' + items.length + ' stored</span></div>' + (items.length ? '<div class="inventory-grid">' + items.map(function (item) { return '<article><span class="item-icon">⚔</span><div><span class="label">Common main-hand weapon</span><h3>' + item.name + '</h3><p>Attack +' + item.attack + ' · Vanguard</p></div><button class="secondary" data-action="inspect-for-hero" data-hero="elara">View Elara</button></article>'; }).join('') + '</div>' : '<div class="empty-state"><h3>The stores are empty</h3><p>Visit the Workshop in Town to forge equipment.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></div>') + '</section>';
+    var selected = items.find(function (item) { return item.id === state.selectedInventoryItem; }) || items[0];
+    var detail = selected ? '<aside class="inventory-detail"><span class="item-icon">⚔</span><span class="label">' + selected.rarity + ' equipment</span><h2>' + selected.name + '</h2><dl><div><dt>Slot</dt><dd>' + SLOT_LABELS[selected.slot] + '</dd></div><div><dt>Attack</dt><dd>+' + selected.attack + '</dd></div><div><dt>Usable by</dt><dd>' + itemRoles(selected) + '</dd></div><div><dt>Source</dt><dd>' + selected.source + '</dd></div></dl><p>Equipment changes are made from the relevant hero’s character sheet.</p></aside>' : '';
+    return heading('Company stores', 'Inventory', 'Browse the equipment owned by the company. Equip it through a hero’s character sheet.') + '<section class="inventory-panel"><div class="section-heading"><h2>Equipment</h2><span>' + items.length + ' stored</span></div>' + (items.length ? '<div class="inventory-layout"><div class="inventory-grid">' + items.map(function (item) { return itemCard(item, { selectable: true, selected: selected && selected.id === item.id }); }).join('') + '</div>' + detail + '</div>' : '<div class="empty-state"><h3>The stores are empty</h3><p>Visit the Workshop in Town to forge equipment.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></div>') + '</section>';
   }
 
   function mainView() {
@@ -448,9 +510,10 @@
       forge: { title: 'Forge an Iron Sword', copy: 'This is an ordinary craft. The item will enter company inventory.' },
       crafting: { title: 'The forge is working', copy: 'The timer continues while the game is closed. The next step will appear when the sword is ready.' },
       'open-roster': { title: 'Open the Roster', copy: 'Equipment is fitted from a hero’s normal character sheet.' },
-      'equip-sword': { title: 'Equip Elara', copy: 'The Iron Sword fits her Main hand slot. Equip it from this character sheet.' },
+      'open-main-hand': { title: 'Choose an equipment slot', copy: 'Open Elara’s Main hand slot to see suitable items in company inventory.' },
+      'equip-sword': { title: 'Equip Elara', copy: 'Choose the Iron Sword for Elara’s Main hand.' },
       'town-tavern': { title: 'Open the Tavern', copy: 'Orin needs time to recover. The Tavern has two configurable recovery slots.' },
-      'assign-orin': { title: 'Assign Orin', copy: 'Orin is selected in the roster. Choose this slot, or drag him here from the right.' },
+      'assign-orin': { title: 'Assign Orin', copy: 'Orin is selected in the roster. Choose this slot, or drag Orin here from the right.' },
       'expeditions-next': { title: 'Keep the company working', copy: 'Orin is unavailable, but any remaining combination of heroes can take the next expedition.' }
     };
     var step = steps[state.tutorial];
@@ -459,22 +522,42 @@
 
   function devPanel() {
     if (!state.devOpen) return '';
-    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
+    var resourceControls = ['gold', 'scrap', 'herbs'].map(function (resource) {
+      return '<div class="admin-resource"><label for="resource-' + resource + '">' + resource.charAt(0).toUpperCase() + resource.slice(1) + '</label><input id="resource-' + resource + '" type="number" min="0" step="1" value="10"><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="add">Add</button><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="set">Set</button></div>';
+    }).join('');
+    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>Primary resources</h3><div class="admin-resources">' + resourceControls + '</div><hr><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
   }
 
-  function applyTutorialSpotlight() {
+  function tutorialTarget() {
     var map = {
       'town-expeditions': 'nav-expeditions', 'expedition-prepare': 'mission-prepare', 'party-send': 'send-expedition', 'claim-rewards': 'claim-rewards',
       'return-town-workshop': 'nav-town', 'town-workshop': 'building-workshop', forge: 'forge', 'open-roster': 'nav-roster',
-      'equip-sword': 'equip-sword', 'town-tavern': 'building-tavern', 'assign-orin': 'facility-slot-0', 'expeditions-next': 'nav-expeditions'
+      'open-main-hand': 'main-hand-slot', 'equip-sword': 'equip-sword', 'town-tavern': 'building-tavern', 'assign-orin': 'facility-slot-0', 'expeditions-next': 'nav-expeditions'
     };
-    if (map[state.tutorial]) {
-      var active = document.querySelector('[data-tutorial-target="' + map[state.tutorial] + '"]');
+    return map[state.tutorial] || null;
+  }
+
+  function tutorialAllows(element) {
+    if (!state.tutorial) return true;
+    if (element.closest && element.closest('.tutorial-card')) return true;
+    var target = tutorialTarget();
+    return Boolean(target && element.closest && element.closest('[data-tutorial-target="' + target + '"]'));
+  }
+
+  function applyTutorialSpotlight() {
+    var target = tutorialTarget();
+    if (target) {
+      var active = document.querySelector('[data-tutorial-target="' + target + '"]');
       if (active) {
         active.classList.add('spotlight');
-        if (map[state.tutorial].indexOf('nav-') !== 0 && active.scrollIntoView) active.scrollIntoView({ block: 'center', inline: 'nearest' });
+        var navigationLayer = active.closest('.primary-nav');
+        if (navigationLayer) navigationLayer.classList.add('tutorial-layer');
+        if (target.indexOf('nav-') !== 0 && active.scrollIntoView) active.scrollIntoView({ block: 'center', inline: 'nearest' });
       }
     }
+    document.querySelectorAll('button, input, select, textarea, [tabindex]').forEach(function (element) {
+      if (!tutorialAllows(element)) { element.setAttribute('tabindex', '-1'); element.setAttribute('aria-disabled', 'true'); }
+    });
   }
 
   function render() {
@@ -482,32 +565,22 @@
     var app = document.getElementById('app');
     if (state.stage === 'intro') { app.innerHTML = intro(); bind(); return; }
     var notice = state.notice ? '<div class="notice">' + esc(state.notice) + '</div>' : '';
-    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.3</span></div></div>' + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
+    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.3.3</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
     bind(); applyTutorialSpotlight();
   }
 
-  function showHelp(element) {
-    var title = document.getElementById('context-help-title'), copy = document.getElementById('context-help-copy');
-    if (title && copy) { title.textContent = element.dataset.infoLabel; copy.textContent = element.dataset.infoCopy; }
-  }
-
   function bind() {
-    document.querySelectorAll('[data-view]').forEach(function (button) { button.addEventListener('click', function () { openView(button.dataset.view); }); });
-    document.querySelectorAll('[data-building]').forEach(function (button) { button.addEventListener('click', function () { openBuilding(button.dataset.building); }); });
-    document.querySelectorAll('[data-action]').forEach(function (button) { button.addEventListener('click', function () { act(button.dataset.action, button.dataset); }); });
-    document.querySelectorAll('.info-term').forEach(function (button) {
-      button.addEventListener('mouseenter', function () { showHelp(button); });
-      button.addEventListener('focus', function () { showHelp(button); });
-      button.addEventListener('click', function () { showHelp(button); });
-    });
+    document.querySelectorAll('[data-view]').forEach(function (button) { button.addEventListener('click', function () { if (tutorialAllows(button)) openView(button.dataset.view); }); });
+    document.querySelectorAll('[data-building]').forEach(function (button) { button.addEventListener('click', function () { if (tutorialAllows(button)) openBuilding(button.dataset.building); }); });
+    document.querySelectorAll('[data-action]').forEach(function (button) { button.addEventListener('click', function () { if (tutorialAllows(button)) act(button.dataset.action, button.dataset); }); });
     document.querySelectorAll('[data-draggable-hero]').forEach(function (element) {
-      element.addEventListener('dragstart', function (event) { draggedHero = element.dataset.draggableHero; event.dataTransfer.setData('text/plain', draggedHero); });
+      element.addEventListener('dragstart', function (event) { if (state.tutorial && !(state.tutorial === 'assign-orin' && element.dataset.draggableHero === 'orin')) { event.preventDefault(); return; } draggedHero = element.dataset.draggableHero; event.dataTransfer.setData('text/plain', draggedHero); });
       element.addEventListener('dragend', function () { draggedHero = null; });
     });
     document.querySelectorAll('[data-drop-facility]').forEach(function (slot) {
-      slot.addEventListener('dragover', function (event) { event.preventDefault(); slot.classList.add('drag-over'); });
+      slot.addEventListener('dragover', function (event) { if (!tutorialAllows(slot)) return; event.preventDefault(); slot.classList.add('drag-over'); });
       slot.addEventListener('dragleave', function () { slot.classList.remove('drag-over'); });
-      slot.addEventListener('drop', function (event) { event.preventDefault(); assignFacility(draggedHero || event.dataTransfer.getData('text/plain'), slot.dataset.dropFacility, Number(slot.dataset.dropSlot)); });
+      slot.addEventListener('drop', function (event) { event.preventDefault(); if (tutorialAllows(slot)) assignFacility(draggedHero || event.dataTransfer.getData('text/plain'), slot.dataset.dropFacility, Number(slot.dataset.dropSlot)); });
     });
     var form = document.getElementById('company-form');
     if (form) form.addEventListener('submit', function (event) { event.preventDefault(); var name = document.getElementById('company-name').value.trim(); if (name) set({ companyName: name, stage: 'playing', view: 'town' }); });
@@ -516,11 +589,12 @@
   }
 
   function openView(view) {
-    var patch = { view: view, activeBuilding: null, notice: null, rosterOpen: false };
+    var patch = { view: view, activeBuilding: null, notice: null, rosterOpen: false, equipmentSlot: null };
     if (state.tutorial === 'town-expeditions' && view === 'expeditions') patch.tutorial = 'expedition-prepare';
     if (state.tutorial === 'return-town-workshop' && view === 'town') patch.tutorial = 'town-workshop';
-    if (state.tutorial === 'open-roster' && view === 'roster') { patch.tutorial = 'equip-sword'; patch.selectedHero = 'elara'; }
+    if (state.tutorial === 'open-roster' && view === 'roster') { patch.tutorial = 'open-main-hand'; patch.selectedHero = 'elara'; }
     if (state.tutorial === 'expeditions-next' && view === 'expeditions') patch.tutorial = null;
+    if (view === 'inventory' && state.completedActivity && state.completedActivity.type === 'craft') patch.completedActivity = null;
     set(patch);
   }
 
@@ -533,11 +607,11 @@
 
   function startExpedition() {
     if (!state.selectedParty.length) return;
-    var run = state.runNumber + 1, sword = hasIronSword('elara');
-    var seed = E.encounterSeed(state.seed, run, state.selectedParty, sword), heroStates = {};
+    var run = state.runNumber + 1, attackBonuses = equipmentAttack();
+    var seed = E.encounterSeed(state.seed, run, state.selectedParty, equipmentSignature()), heroStates = {};
     state.selectedParty.forEach(function (key) { heroStates[key] = Object.assign({}, state.heroes[key]); });
     var duration = state.firstExpeditionComplete ? 25 : 45;
-    state.activities.expedition = { type: 'expedition', title: 'Abandoned Road', party: state.selectedParty.slice(), heroStates: heroStates, startedAt: Date.now(), endsAt: Date.now() + duration * 1000, duration: duration, seed: seed, swordEquipped: sword, context: state.firstExpeditionComplete ? 'repeat' : 'first' };
+    state.activities.expedition = { type: 'expedition', title: 'Abandoned Road', party: state.selectedParty.slice(), heroStates: heroStates, startedAt: Date.now(), endsAt: Date.now() + duration * 1000, duration: duration, seed: seed, equipmentAttack: attackBonuses, context: state.firstExpeditionComplete ? 'repeat' : 'first' };
     set({ runNumber: run, expeditionScreen: 'active', currentResult: null, tutorial: null });
   }
 
@@ -554,7 +628,7 @@
     state.gold -= facility.cost;
     state.activities.facilities[facilityKey][index] = { type: 'facility', title: facility.activity, hero: hero, startedAt: Date.now(), endsAt: Date.now() + facility.duration * 1000, duration: facility.duration, effects: facility.effects };
     var patch = { selectedHero: hero, notice: E.HEROES[hero].name + ' has begun ' + facility.activity + '.' };
-    if (state.tutorial === 'assign-orin' && hero === 'orin') { patch.tutorial = 'expeditions-next'; patch.activeBuilding = null; }
+    if (state.tutorial === 'assign-orin' && hero === 'orin') patch.tutorial = 'expeditions-next';
     set(patch);
   }
 
@@ -562,16 +636,17 @@
     var index = state.inventory.findIndex(function (item) { return item.id === itemId; });
     if (index < 0) return;
     var item = state.inventory[index], equipment = Object.assign(emptyEquipment(), state.equipment[hero]);
+    if (!itemCompatible(item, hero, item.slot)) return;
     if (equipment[item.slot]) state.inventory.push(equipment[item.slot]);
     equipment[item.slot] = item; state.equipment[hero] = equipment; state.inventory.splice(index, 1);
-    var patch = { notice: item.name + ' equipped by ' + E.HEROES[hero].name + '.' };
+    var patch = { notice: item.name + ' equipped by ' + E.HEROES[hero].name + '.', equipmentSlot: null, completedActivity: null };
     if (state.tutorial === 'equip-sword') { patch.view = 'town'; patch.tutorial = 'town-tavern'; patch.activeBuilding = null; }
     set(patch);
   }
 
   function act(action, data) {
     if (action === 'toggle-roster') set({ rosterOpen: !state.rosterOpen });
-    if (action === 'select-hero' && data.hero) set({ selectedHero: data.hero, rosterOpen: false });
+    if (action === 'select-hero' && data.hero) set({ selectedHero: data.hero, rosterOpen: false, equipmentSlot: null });
     if (action === 'toggle-party' && data.hero && !heroBusy(data.hero)) {
       var selected = state.selectedParty.indexOf(data.hero) >= 0 ? state.selectedParty.filter(function (key) { return key !== data.hero; }) : state.selectedParty.concat(data.hero);
       set({ selectedParty: selected });
@@ -586,13 +661,35 @@
     if (action === 'assign-facility') assignFacility(state.selectedHero, data.facility, Number(data.slot));
     if (action === 'craft' && !state.activities.craft && state.gold >= 15 && state.scrap >= 3) {
       state.gold -= 15; state.scrap -= 3;
-      state.activities.craft = { type: 'craft', title: 'Iron Sword', startedAt: Date.now(), endsAt: Date.now() + 30000, duration: 30 };
-      set({ tutorial: state.tutorial === 'forge' ? 'crafting' : state.tutorial, notice: null });
+      var craftDuration = state.tutorial === 'forge' ? 10 : 30;
+      state.activities.craft = { type: 'craft', title: 'Iron Sword', startedAt: Date.now(), endsAt: Date.now() + craftDuration * 1000, duration: craftDuration };
+      set({ tutorial: state.tutorial === 'forge' ? 'crafting' : state.tutorial, notice: null, completedActivity: null });
     }
+    if (action === 'open-equipment-slot' && data.hero && data.slot) set({ selectedHero: data.hero, equipmentSlot: data.slot, tutorial: state.tutorial === 'open-main-hand' && data.slot === 'mainHand' ? 'equip-sword' : state.tutorial });
+    if (action === 'close-equipment-picker') set({ equipmentSlot: null });
     if (action === 'equip-item') equipItem(data.hero, data.itemId);
-    if (action === 'inspect-for-hero') set({ view: 'roster', selectedHero: data.hero });
+    if (action === 'unequip-item' && data.hero && data.slot) {
+      var worn = state.equipment[data.hero][data.slot];
+      if (worn) { state.inventory.push(worn); state.equipment[data.hero][data.slot] = null; set({ equipmentSlot: data.slot, notice: worn.name + ' returned to company inventory.' }); }
+    }
+    if (action === 'select-inventory-item') set({ selectedInventoryItem: data.itemId });
+    if (action === 'open-activity') {
+      if (data.activity === 'expedition') set({ view: 'expeditions', expeditionScreen: state.activities.expedition ? 'active' : state.expeditionScreen, activeBuilding: null });
+      if (data.activity === 'craft') set({ view: 'town', activeBuilding: 'workshop' });
+      if (data.activity === 'craft-ready') set({ view: 'inventory', activeBuilding: null, completedActivity: null });
+    }
     if (action === 'skip-tutorial') set({ tutorial: null, tutorialSkipped: true });
     if (action === 'dev') set({ devOpen: !state.devOpen });
+    if (action === 'change-resource' && data.resource) {
+      var resourceInput = document.getElementById('resource-' + data.resource);
+      var resourceValue = resourceInput ? Math.floor(Number(resourceInput.value)) : NaN;
+      if (['gold', 'scrap', 'herbs'].indexOf(data.resource) >= 0 && Number.isFinite(resourceValue) && resourceValue >= 0) {
+        var resourcePatch = {};
+        resourcePatch[data.resource] = data.mode === 'set' ? resourceValue : state[data.resource] + resourceValue;
+        resourcePatch.notice = data.resource.charAt(0).toUpperCase() + data.resource.slice(1) + ' adjusted by administrative control.';
+        set(resourcePatch);
+      }
+    }
     if (action === 'skip-timers') {
       if (state.activities.expedition) state.activities.expedition.endsAt = Date.now();
       if (state.activities.craft) state.activities.craft.endsAt = Date.now();

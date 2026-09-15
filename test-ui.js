@@ -5,10 +5,15 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const E = require('./engine.js');
 const source = fs.readFileSync('./game.js', 'utf8');
+const styles = fs.readFileSync('./styles.css', 'utf8');
 
 assert.doesNotMatch(source, /state\.resultClaimed \|\| !state\.currentResult/, 'A stale claim flag must not block an unclaimed visible result');
 assert.match(source, /active\.scrollIntoView/, 'Tutorial targets must be moved clear of the fixed guidance card');
 assert.match(source, /tutorial-active/, 'Tutorial pages must reserve enough room to reveal highlighted controls');
+assert.match(source, /function tutorialAllows/, 'The tutorial must gate interactions to its current target');
+assert.match(styles, /primary-nav\.tutorial-layer/, 'Top navigation must be lifted above the tutorial shade');
+assert.doesNotMatch(source, /function helpPanel/, 'Help must be contextual rather than occupying a permanent panel');
+assert.match(source, /craftDuration = state\.tutorial === 'forge' \? 10 : 30/, 'The guided first craft must be shortened to ten seconds');
 
 function renderState(savedState, storageKey) {
   const app = { innerHTML: '' };
@@ -65,17 +70,43 @@ const tavern = renderState(playing({ activeBuilding: 'tavern' }));
 assert.match(tavern, /2 configurable recovery slots|Slot 2/);
 assert.match(tavern, /Place selected hero/);
 
+const busyTavern = renderState(playing({
+  activeBuilding: 'tavern',
+  selectedHero: 'orin',
+  activities: { expedition: null, craft: null, facilities: { tavern: [{ hero: 'orin', endsAt: Date.now() + 30000, effects: { readiness: 25, mana: 20 } }, null], infirmary: [null] } }
+}));
+assert.match(busyTavern, /Selected hero is busy/);
+assert.doesNotMatch(busyTavern, /Assign Orin Vale/);
+
 const roster = renderState(playing({ view: 'roster' }));
 assert.match(roster, />Ward</);
 assert.match(roster, />Accuracy</);
 assert.match(roster, />Critical</);
 assert.match(roster, /Main hand/);
+assert.match(roster, />Traits</);
 assert.doesNotMatch(roster, /title=/, 'Help terms must not trigger duplicate native tooltips');
+
+const equipment = renderState(playing({
+  view: 'roster',
+  equipmentSlot: 'mainHand',
+  inventory: [{ id: 'test-sword', key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Test' }]
+}));
+assert.match(equipment, /Choose equipment/);
+assert.match(equipment, /data-action="equip-item"/);
 
 const preparation = renderState(playing({ view: 'expeditions', expeditionScreen: 'prepare' }));
 assert.match(preparation, />WARD</);
-assert.match(preparation, /Select an underlined term/);
+assert.match(preparation, /class="info-popover"/);
 assert.match(preparation, /Vanguard/);
+
+const inventory = renderState(playing({
+  view: 'inventory',
+  inventory: [{ id: 'test-sword', key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Forged in the Company Workshop' }]
+}));
+assert.match(inventory, /Usable by/);
+assert.match(inventory, /Forged in the Company Workshop/);
+assert.doesNotMatch(inventory, /View Elara/);
+assert.doesNotMatch(inventory, /data-action="equip-item"/);
 
 const migrated = renderState({
   saveVersion: 2,
