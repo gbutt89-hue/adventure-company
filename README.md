@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.3.3
+## Prototype 0.3.4
 
 The current slice covers:
 

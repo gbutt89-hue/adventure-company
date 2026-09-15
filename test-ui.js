@@ -12,6 +12,7 @@ assert.match(source, /active\.scrollIntoView/, 'Tutorial targets must be moved c
 assert.match(source, /tutorial-active/, 'Tutorial pages must reserve enough room to reveal highlighted controls');
 assert.match(source, /function tutorialAllows/, 'The tutorial must gate interactions to its current target');
 assert.match(styles, /primary-nav\.tutorial-layer/, 'Top navigation must be lifted above the tutorial shade');
+assert.match(styles, /info-wrap>\.info-popover[^}]*display:none/, 'Nested identity styles must not force contextual tooltips open');
 assert.doesNotMatch(source, /function helpPanel/, 'Help must be contextual rather than occupying a permanent panel');
 assert.match(source, /craftDuration = state\.tutorial === 'forge' \? 10 : 30/, 'The guided first craft must be shortened to ten seconds');
 
