@@ -8,6 +8,7 @@ const source = fs.readFileSync('./game.js', 'utf8');
 
 assert.doesNotMatch(source, /state\.resultClaimed \|\| !state\.currentResult/, 'A stale claim flag must not block an unclaimed visible result');
 assert.match(source, /active\.scrollIntoView/, 'Tutorial targets must be moved clear of the fixed guidance card');
+assert.match(source, /tutorial-active/, 'Tutorial pages must reserve enough room to reveal highlighted controls');
 
 function renderState(savedState, storageKey) {
   const app = { innerHTML: '' };
