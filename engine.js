@@ -6,26 +6,30 @@
   'use strict';
 
   const HEROES = {
-    elara: { name: 'Elara Voss', role: 'Vanguard', combatStyle: 'Melee', maxHealth: 44, attack: 9, armour: 5, ward: 3, speed: 8, accuracy: 84, critical: 11, damageType: 'physical', trait: 'Protective' },
-    fen: { name: 'Fen Alder', role: 'Ranger', combatStyle: 'Ranged', maxHealth: 32, attack: 8, armour: 2, ward: 2, speed: 16, accuracy: 91, critical: 18, damageType: 'physical', trait: 'Eagle-eyed' },
-    orin: { name: 'Orin Vale', role: 'Acolyte', combatStyle: 'Caster', maxHealth: 30, attack: 7, armour: 1, ward: 6, speed: 11, accuracy: 84, critical: 11, damageType: 'magical', trait: 'Studious' }
+    elara: { name: 'Elara Voss', role: 'Vanguard', combatStyle: 'Melee', maxHealth: 44, maxMana: 0, attack: 9, armour: 5, ward: 3, speed: 8, accuracy: 84, evasion: 8, critical: 11, resistances: { fire: 20 }, damageType: 'physical', traits: ['Protective'] },
+    fen: { name: 'Fen Alder', role: 'Ranger', combatStyle: 'Ranged', maxHealth: 32, maxMana: 0, attack: 8, armour: 2, ward: 2, speed: 16, accuracy: 91, evasion: 18, critical: 18, resistances: { fire: 10 }, damageType: 'physical', traits: ['Eagle-eyed'] },
+    orin: { name: 'Orin Vale', role: 'Acolyte', combatStyle: 'Caster', maxHealth: 30, maxMana: 45, attack: 7, armour: 1, ward: 6, speed: 11, accuracy: 84, evasion: 10, critical: 11, resistances: { fire: 25 }, damageType: 'magical', traits: ['Studious'] },
+    sable: { name: 'Sable Reed', role: 'Skirmisher', combatStyle: 'Melee', maxHealth: 31, maxMana: 0, attack: 8, armour: 2, ward: 3, speed: 17, accuracy: 89, evasion: 22, critical: 17, resistances: { fire: 10 }, damageType: 'physical', traits: ['Elusive', 'Cinder-born'] }
   };
 
   const TRAITS = {
     Protective: '38% chance to intercept an attack aimed at an ally.',
     'Eagle-eyed': '+7 percentage points to hit chance and critical-hit chance.',
-    Studious: 'Gains 25% more experience from expeditions.'
+    Studious: 'Gains 25% more experience from expeditions.',
+    Elusive: '+8 Evasion is included in this hero’s combat statistics.',
+    'Cinder-born': '+10 percentage points to Fire Resistance, included in this hero’s resistances.'
   };
 
   const ROLES = {
     Vanguard: 'Melee · Physical. A durable fighter suited to armour, shields and protecting allies.',
     Ranger: 'Ranged · Physical. A fast attacker with greater accuracy and critical-hit chance.',
-    Acolyte: 'Caster · Magical. A spellcaster whose attacks test Ward and consume Mana.'
+    Acolyte: 'Caster · Magical. A spellcaster whose attacks test Ward and consume Mana.',
+    Skirmisher: 'Melee · Physical. A light-armoured attacker who relies on Speed and Evasion rather than Armour.'
   };
 
   const ENEMIES = [
-    { key: 'cutpurse', name: 'Road Cutpurse', maxHealth: 18, attack: 6, armour: 1, speed: 13 },
-    { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 24, attack: 7, armour: 3, speed: 7 }
+    { key: 'cutpurse', name: 'Road Cutpurse', maxHealth: 18, attack: 6, armour: 1, speed: 13, accuracy: 88, evasion: 8 },
+    { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 24, attack: 7, armour: 3, speed: 7, accuracy: 88, evasion: 3 }
   ];
 
   function hashSeed(text) {
@@ -63,6 +67,10 @@
     return 0.8;
   }
 
+  function hasTrait(key, trait) {
+    return Boolean(HEROES[key] && HEROES[key].traits.indexOf(trait) >= 0);
+  }
+
   function effectiveStats(key, options) {
     const hero = HEROES[key];
     if (!hero) return null;
@@ -75,13 +83,14 @@
       ward: hero.ward,
       speed: Math.max(1, Math.round(hero.speed * modifier)),
       accuracy: hero.accuracy,
+      evasion: hero.evasion,
       critical: hero.critical,
       readinessModifier: modifier
     };
   }
 
   function experienceGain(key, baseExperience) {
-    return key === 'orin' ? Math.ceil(baseExperience * 1.25) : baseExperience;
+    return hasTrait(key, 'Studious') ? Math.ceil(baseExperience * 1.25) : baseExperience;
   }
 
   function simulateBattle(options) {
@@ -96,7 +105,7 @@
     const heroUnits = party.map(key => {
       const condition = heroStates[key] || {};
       const healthPercent = clamp(condition.health === undefined ? 100 : condition.health, 1, 100);
-      const mana = clamp(condition.mana === undefined ? 100 : condition.mana, 0, 100);
+      const mana = clamp(condition.mana === undefined ? HEROES[key].maxMana : condition.mana, 0, HEROES[key].maxMana);
       const readiness = clamp(condition.readiness === undefined ? 100 : condition.readiness, 0, 100);
       const stats = effectiveStats(key, { readiness, swordEquipped: sword, weaponBonus: equipmentAttack[key] });
       const hp = Math.max(1, Math.round(HEROES[key].maxHealth * healthPercent / 100));
@@ -104,7 +113,7 @@
         key, side: 'hero', name: HEROES[key].name, hp, startingHp: hp,
         startingHealthPercent: Math.round(healthPercent), maxHp: HEROES[key].maxHealth,
         attack: stats.attack, armour: stats.armour, ward: stats.ward, speed: stats.speed,
-        accuracy: stats.accuracy, critical: stats.critical,
+        accuracy: stats.accuracy, evasion: stats.evasion, critical: stats.critical,
         readinessModifier: stats.readinessModifier, mana, startingMana: mana,
         magical: HEROES[key].damageType === 'magical', potion: true
       };
@@ -135,7 +144,7 @@
           const targets = enemyUnits.filter(unit => unit.hp > 0);
           if (!targets.length) break;
           const target = pick(targets, rng);
-          const hitChance = actor.accuracy / 100;
+          const hitChance = clamp((actor.accuracy - (target.evasion || 0)) / 100, 0.35, 0.97);
           if (rng() > hitChance) {
             write(actor.name + ' attacks ' + target.name + ' but misses.');
             continue;
@@ -154,6 +163,8 @@
             skill = 'Staff Strike';
           } else if (actor.key === 'elara') {
             skill = pick(['Shield Bash', 'Measured Strike', 'Guarded Lunge'], rng);
+          } else if (actor.key === 'sable') {
+            skill = pick(['Feinting Slash', 'Low Sweep', 'Passing Cut'], rng);
           } else {
             skill = pick(['Quick Shot', 'Barbed Arrow', 'Deadeye Shot'], rng);
           }
@@ -167,11 +178,12 @@
           if (!targets.length) break;
           let target = pick(targets, rng);
           const elara = heroUnits.find(unit => unit.key === 'elara' && unit.hp > 0);
-          if (elara && target.key !== 'elara' && rng() < 0.38) {
+          if (elara && hasTrait('elara', 'Protective') && target.key !== 'elara' && rng() < 0.38) {
             write('Elara intercepts a strike meant for ' + target.name + '.');
             target = elara;
           }
-          if (rng() > 0.79) {
+          const hitChance = clamp(((actor.accuracy || 88) - (target.evasion || 0)) / 100, 0.35, 0.97);
+          if (rng() > hitChance) {
             write(actor.name + ' swings at ' + target.name + ' and misses.');
             continue;
           }
@@ -224,6 +236,7 @@
     if (!party.length) return null;
     let successes = 0;
     let injuries = 0;
+    let seriousOutcomes = 0;
     let healthLoss = 0;
     const samples = options.samples || 400;
     for (let i = 0; i < samples; i += 1) {
@@ -237,8 +250,10 @@
       });
       if (result.success) successes += 1;
       const values = Object.values(result.heroes);
-      if (values.some(hero => hero.injured)) injuries += 1;
-      healthLoss += values.reduce((sum, hero) => sum + (100 - hero.healthPercent), 0) / values.length;
+      const injury = values.some(hero => hero.injured);
+      if (injury) injuries += 1;
+      if (!result.success || injury) seriousOutcomes += 1;
+      healthLoss += values.reduce((sum, hero) => sum + Math.max(0, hero.startingHealthPercent - hero.healthPercent), 0) / values.length;
     }
     const successChance = Math.round(successes / samples * 100);
     const injuryChance = Math.round(injuries / samples * 100);
@@ -246,7 +261,7 @@
       successChance,
       injuryChance,
       expectedHealthLoss: Math.round(healthLoss / samples),
-      danger: Math.min(99, Math.max(1, Math.round((100 - successChance) * 0.7 + injuryChance * 0.3)))
+      danger: Math.min(99, Math.max(1, Math.round(seriousOutcomes / samples * 100)))
     };
   }
 
@@ -257,6 +272,6 @@
 
   return {
     HEROES, TRAITS, ROLES, ENEMIES, hashSeed, randomFrom, readinessModifier,
-    effectiveStats, experienceGain, simulateBattle, forecast, encounterSeed
+    effectiveStats, experienceGain, simulateBattle, forecast, encounterSeed, hasTrait
   };
 });

@@ -14,14 +14,19 @@ const forecastB=E.forecast({party:['elara'],seed:'forecast',swordEquipped:true,s
 assert.deepEqual(forecastA,forecastB,'Forecast must be deterministic');
 assert.ok(forecastA.successChance>=0&&forecastA.successChance<=100);
 assert.ok(forecastA.danger>=1&&forecastA.danger<=99);
+assert.ok(forecastA.expectedHealthLoss>=0&&forecastA.expectedHealthLoss<=100,'Expected wear must measure loss during the expedition');
 
 assert.equal(E.effectiveStats('elara',{readiness:100,swordEquipped:false}).armour,E.HEROES.elara.armour,'Displayed and simulated Armour must share one source');
 assert.equal(E.effectiveStats('orin',{readiness:100}).ward,E.HEROES.orin.ward,'Displayed Ward must share the combat data source');
+assert.equal(E.effectiveStats('sable',{readiness:100}).evasion,E.HEROES.sable.evasion,'Displayed Evasion must share the combat data source');
 assert.equal(E.effectiveStats('fen',{readiness:100,weaponBonus:4}).attack,E.HEROES.fen.attack+4,'A compatible weapon bonus must apply to its actual wearer');
 assert.equal(E.HEROES.orin.combatStyle,'Caster','The Acolyte must be identified as a caster');
 assert.ok(E.effectiveStats('fen',{readiness:35}).speed<E.effectiveStats('fen',{readiness:100}).speed,'Low Readiness must reduce effective Speed');
 assert.equal(E.experienceGain('orin',20),25,'Studious must grant 25% additional expedition XP');
 assert.match(E.TRAITS.Protective,/38%/,'Protective must expose its exact effect');
+assert.ok(Array.isArray(E.HEROES.sable.traits)&&E.HEROES.sable.traits.length===2,'Heroes must support multiple traits');
+assert.equal(E.HEROES.orin.maxMana,45,'Caster Mana must have an explicit maximum');
+assert.equal(E.HEROES.elara.maxMana,0,'Non-casters must not carry a redundant Mana pool');
 
 const fullCondition={
   elara:{health:100,mana:30,readiness:100},

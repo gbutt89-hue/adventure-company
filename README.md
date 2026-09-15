@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.3.5
+## Prototype 0.4
 
 The current slice covers:
 
@@ -22,7 +22,13 @@ The current slice covers:
 - real Craft XP progression and guided recovery hand-offs
 - company Inventory and equipment management through a reusable character sheet
 - twelve-slot company storage, filtered equipment selection, dismantling and safe Workshop overflow
-- Armour, Ward, Accuracy and Critical combat statistics
+- a three-slot expedition company with a scalable compact roster picker
+- a Darkest Dungeon-inspired character information hierarchy
+- a fourth light-armoured hero, Sable Reed
+- separate Speed and Evasion statistics, plus visible Fire resistance
+- explicit caster Mana pools and clearer Health, Mana, Readiness and XP indicators
+- multi-trait hero data and presentation
+- separate serious-outcome risk and expected-wear forecasts
 
 The game is deliberately data-led and low-animation. The current goal is to validate the Town, expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.
 

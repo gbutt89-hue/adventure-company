@@ -19,7 +19,7 @@ assert.match(source, /craftDuration = state\.tutorial === 'forge' \? 10 : 30/, '
 function renderState(savedState, storageKey) {
   const app = { innerHTML: '' };
   const storage = new Map();
-  if (savedState) storage.set(storageKey || 'adventure-company-prototype-v3', JSON.stringify(savedState));
+  if (savedState) storage.set(storageKey || 'adventure-company-prototype-v4', JSON.stringify(savedState));
   const document = {
     modelContext: null,
     getElementById(id) { return id === 'app' ? app : null; },
@@ -46,7 +46,7 @@ function renderState(savedState, storageKey) {
 
 function playing(overrides) {
   return Object.assign({
-    saveVersion: 3,
+    saveVersion: 4,
     stage: 'playing',
     companyName: 'Test Company',
     view: 'town',
@@ -66,6 +66,9 @@ assert.match(town, />Town</);
 assert.match(town, /<strong>Tavern<\/strong>/);
 assert.match(town, /<strong>Workshop<\/strong>/);
 assert.match(town, /Company roster/);
+assert.match(town, /Sable Reed/);
+assert.match(town, /aria-label="Health: 44 of 44"/);
+assert.doesNotMatch(town, /aria-label="Mana: 0 of 0"/);
 
 const tavern = renderState(playing({ activeBuilding: 'tavern' }));
 assert.match(tavern, /2 configurable recovery slots|Slot 2/);
@@ -81,6 +84,8 @@ assert.doesNotMatch(busyTavern, /Assign Orin Vale/);
 
 const roster = renderState(playing({ view: 'roster' }));
 assert.match(roster, />Ward</);
+assert.match(roster, />Evasion</);
+assert.match(roster, />Fire</);
 assert.match(roster, />Accuracy</);
 assert.match(roster, />Critical</);
 assert.match(roster, /Main hand/);
@@ -98,7 +103,12 @@ assert.match(equipment, /data-action="equip-item"/);
 assert.match(equipment, /data-action="cancel-equipment-choice"/);
 
 const preparation = renderState(playing({ view: 'expeditions', expeditionScreen: 'prepare' }));
-assert.match(preparation, />WARD</);
+assert.match(preparation, /Selected company/);
+assert.match(preparation, /Choose adventurers/);
+assert.match(preparation, /Sable Reed/);
+assert.match(preparation, /Serious outcome risk/);
+assert.match(preparation, /Expected wear/);
+assert.doesNotMatch(preparation, />ATK</);
 assert.match(preparation, /class="info-popover"/);
 assert.match(preparation, /Vanguard/);
 
