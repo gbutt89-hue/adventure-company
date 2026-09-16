@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.7.1
+## Prototype 0.7.2
 
 The current slice covers:
 
@@ -29,7 +29,7 @@ The current slice covers:
 - explicit caster Mana pools and clearer Health, Mana, Readiness and XP indicators
 - multi-trait hero data and presentation
 - separate serious-outcome risk and expected-wear forecasts
-- three expedition locations with staged unlocks and distinct physical, evasive and magical/fire threats
+- four expedition locations, including a low-yield recovery route, with staged unlocks and distinct threats
 - concurrent expeditions across different locations, with one activity slot per location
 - Careful, Standard, Aggressive and Scavenge expedition approaches
 - encounter-specific Favoured indicators with exact explanations
@@ -49,8 +49,10 @@ The current slice covers:
 - a faster Health-focused Infirmary that treats persistent Injuries without restoring Mana or Readiness
 - live recovery projections in the roster rail and enforced Infirmary treatment for Injured heroes
 - approach-adjusted reward previews and weighted per-expedition loot tables
-- Iron Ore and Common Herbs stored as inventory materials rather than global resources
+- Iron Ore, Common Herbs, Ashwood and Tanned Hide stored as inventory materials rather than global resources
 - no XP when every dispatched hero returns Injured
+- Emergency Treatment when every hero is Injured and normal treatment is genuinely unaffordable
+- Ashwood Club and Hunting Bow base-tier crafts for early equipment testing
 
 The game is deliberately data-led and low-animation. The current goal is to validate the Town, expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.
 

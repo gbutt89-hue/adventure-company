@@ -62,6 +62,8 @@
 
   var CRAFT_RECIPES = {
     'iron-sword': { key: 'iron-sword', name: 'Iron Sword', icon: '⚔', label: 'Common main-hand weapon', description: 'Attack +4. Usable by a Vanguard, Ranger or Skirmisher.', gold: 15, materials: { 'iron-ore': 3 }, duration: 30, xp: 18, outputType: 'equipment' },
+    'ashwood-club': { key: 'ashwood-club', name: 'Ashwood Club', icon: '♣', label: 'Common main-hand weapon', description: 'Attack +2. Usable by a Vanguard or Skirmisher.', gold: 5, materials: { ashwood: 2 }, duration: 10, xp: 8, outputType: 'equipment', attack: 2, allowedRoles: ['Vanguard', 'Skirmisher'], salvage: { key: 'ashwood', quantity: 1 } },
+    'hunting-bow': { key: 'hunting-bow', name: 'Hunting Bow', icon: '➶', label: 'Common main-hand weapon', description: 'Attack +3. Usable by a Ranger.', gold: 8, materials: { ashwood: 2, 'tanned-hide': 1 }, duration: 15, xp: 10, outputType: 'equipment', attack: 3, allowedRoles: ['Ranger'], salvage: { key: 'ashwood', quantity: 1 } },
     'field-tonic': { key: 'field-tonic', name: 'Field Tonic', icon: '✚', label: 'Expedition supply', description: E.SUPPLIES['field-tonic'].description, gold: 4, materials: { 'common-herb': 1 }, duration: 12, xp: 8, outputType: 'supply' },
     'mana-draught': { key: 'mana-draught', name: 'Mana Draught', icon: '◆', label: 'Expedition supply', description: E.SUPPLIES['mana-draught'].description, gold: 6, materials: { 'common-herb': 1 }, duration: 15, xp: 10, outputType: 'supply' }
   };
@@ -75,7 +77,7 @@
   function fresh() {
     return {
       saveVersion: 8, stage: 'intro', view: 'town', expeditionScreen: 'list', activeBuilding: null,
-      companyName: '', gold: 20, materials: { 'iron-ore': 0, 'common-herb': 0 }, seed: '731942', runNumber: 0,
+      companyName: '', gold: 20, materials: { 'iron-ore': 0, 'common-herb': 0, ashwood: 0, 'tanned-hide': 0 }, seed: '731942', runNumber: 0,
       selectedParty: ['elara', 'fen', 'orin'], selectedHero: 'elara', selectedExpedition: 'abandoned-road', selectedApproach: 'standard', selectedSupplies: [null, null], firstExpeditionComplete: false,
       tutorial: 'town-expeditions', tutorialSkipped: false, rosterOpen: false, devOpen: false, notice: null,
       currentResult: null, lastResult: null, resultContext: null, resultClaimed: false, expeditionResults: {}, completedExpeditions: {},
@@ -213,12 +215,17 @@
   var state = load();
 
   function ironSword(id) {
-    return { id: id, key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger', 'Skirmisher'], source: 'Forged in the Company Workshop' };
+    return createEquipment('iron-sword', id);
+  }
+
+  function createEquipment(key, id) {
+    var recipe = CRAFT_RECIPES[key] || CRAFT_RECIPES['iron-sword'];
+    return { id: id, key: recipe.key, name: recipe.name, icon: recipe.icon, slot: 'mainHand', attack: Number(recipe.attack || 4), rarity: 'Common', allowedRoles: (recipe.allowedRoles || ['Vanguard', 'Ranger', 'Skirmisher']).slice(), salvage: recipe.salvage || { key: 'iron-ore', quantity: 1 }, source: 'Forged in the Company Workshop' };
   }
 
   function normaliseItem(item) {
     if (!item) return item;
-    if (item.key === 'iron-sword') return Object.assign(ironSword(item.id), item, { allowedRoles: ['Vanguard', 'Ranger', 'Skirmisher'] });
+    if (CRAFT_RECIPES[item.key] && CRAFT_RECIPES[item.key].outputType === 'equipment') return Object.assign(createEquipment(item.key, item.id), item, item.key === 'iron-sword' ? { allowedRoles: ['Vanguard', 'Ranger', 'Skirmisher'] } : {});
     return item;
   }
 
@@ -254,6 +261,14 @@
   function materialCosts(recipe) { return Object.keys(recipe.materials || {}).map(function (key) { return recipe.materials[key] + ' ' + E.MATERIALS[key].name; }); }
   function addMaterials(materials) { Object.keys(materials || {}).forEach(function (key) { state.materials[key] = Number(state.materials[key] || 0) + Number(materials[key] || 0); }); }
   function heroUnavailable(key) { return heroBusy(key) || Boolean(state.heroes[key] && state.heroes[key].injured); }
+
+  function emergencyTreatmentEligible() {
+    var availableInjured = Object.keys(E.HEROES).filter(function (key) { return state.heroes[key].injured && !heroBusy(key); });
+    var hasDeployableHero = Object.keys(E.HEROES).some(function (key) { return !heroUnavailable(key); });
+    var cheapestTreatment = availableInjured.reduce(function (lowest, key) { return Math.min(lowest, facilityCost('infirmary', key)); }, Infinity);
+    var unclaimedGold = Object.keys(state.expeditionResults).reduce(function (total, key) { return total + Number(state.expeditionResults[key] && state.expeditionResults[key].rewards && state.expeditionResults[key].rewards.gold || 0); }, 0);
+    return availableInjured.length > 0 && !hasDeployableHero && !allExpeditionActivities().length && !allFacilityActivities().length && state.gold + unclaimedGold < cheapestTreatment;
+  }
 
   function recoveryRecommendation() {
     var ranked = Object.keys(E.HEROES).filter(function (key) { return !heroBusy(key); }).map(function (key) {
@@ -325,7 +340,7 @@
 
   function expeditionUnlocked(key) {
     if (key === 'abandoned-road') return true;
-    if (key === 'briar-den') return state.firstExpeditionComplete;
+    if (key === 'forage-outskirts' || key === 'briar-den') return state.firstExpeditionComplete;
     return Number(state.completedExpeditions['briar-den'] || 0) > 0;
   }
 
@@ -395,14 +410,14 @@
         state.consumables[recipe.key] = Number(state.consumables[recipe.key] || 0) + 1;
         state.notice = recipe.name + ' is ready and has been placed in company supplies.';
       } else {
-        var finishedItem = ironSword('item-' + state.nextItemId);
+        var finishedItem = createEquipment(recipe.key, 'item-' + state.nextItemId);
         state.nextItemId += 1;
         if (inventoryFull()) {
           state.workshopOutput = finishedItem;
-          state.notice = 'The Iron Sword is ready, but company inventory is full. It is waiting safely at the Workshop.';
+          state.notice = 'The ' + recipe.name + ' is ready, but company inventory is full. It is waiting safely at the Workshop.';
         } else {
           state.inventory.push(finishedItem);
-          state.notice = 'The Iron Sword is ready and has been placed in company inventory.';
+          state.notice = 'The ' + recipe.name + ' is ready and has been placed in company inventory.';
         }
       }
       state.completedActivity = { type: 'craft', label: 'Workshop: item ready' };
@@ -655,7 +670,7 @@
     var storage = '<span class="storage-count ' + (inventoryFull() ? 'full' : '') + '">' + state.inventory.length + '/' + state.inventoryCapacity + ' inventory slots occupied</span>';
     var body;
     if (craft) body = '<article class="craft-card"><div class="item-icon">' + CRAFT_RECIPES[craft.recipeKey || 'iron-sword'].icon + '</div><div><span class="label">In progress</span><h3>' + esc(craft.title) + '</h3><div class="timer small" data-countdown-key="craft">' + timeText(remaining(craft)) + '</div><div class="progress"><i data-progress-key="craft" style="width:' + activityProgress(craft) + '%"></i></div></div></article>';
-    else if (state.workshopOutput) body = '<article class="craft-card output-ready"><div class="item-icon">⚔</div><div><span class="label">Craft complete</span><h3>' + state.workshopOutput.name + '</h3><p>' + (inventoryFull() ? 'Company inventory is full. The item will remain safely here until space is available.' : 'A space is available in company inventory.') + '</p>' + storage + '<div class="craft-actions"><button class="primary" data-action="store-workshop-output" ' + (inventoryFull() ? 'disabled' : '') + '>Store in Inventory</button><button class="secondary" data-view="inventory">Manage Inventory</button></div></div></article>';
+    else if (state.workshopOutput) body = '<article class="craft-card output-ready"><div class="item-icon">' + (state.workshopOutput.icon || '⚔') + '</div><div><span class="label">Craft complete</span><h3>' + state.workshopOutput.name + '</h3><p>' + (inventoryFull() ? 'Company inventory is full. The item will remain safely here until space is available.' : 'A space is available in company inventory.') + '</p>' + storage + '<div class="craft-actions"><button class="primary" data-action="store-workshop-output" ' + (inventoryFull() ? 'disabled' : '') + '>Store in Inventory</button><button class="secondary" data-view="inventory">Manage Inventory</button></div></div></article>';
     else body = '<div class="recipe-grid">' + Object.keys(CRAFT_RECIPES).map(function (key) {
       var recipe = CRAFT_RECIPES[key], duration = state.tutorial === 'forge' && key === 'iron-sword' ? 5 : recipe.duration;
       var disabled = state.gold < recipe.gold || !hasRecipeMaterials(recipe) || (recipe.outputType === 'equipment' && inventoryFull());
@@ -673,7 +688,12 @@
     if (!facility.working) return facilityFrame(key, '<article class="locked-facility"><span class="label">Not yet operating</span><h3>' + facility.shortName + ' will open in a later prototype</h3><p>The building is visible now so the Town can grow without changing its basic geography.</p></article>');
     var selected = state.selectedHero;
     var selectedCopy = selected ? '<div class="selected-hero-banner"><span>Selected for placement</span><strong>' + E.HEROES[selected].name + '</strong>' + (heroBusy(selected) ? '<em>Currently unavailable</em>' : '<em>Drag the hero or choose an empty slot</em>') + '</div>' : '';
-    return facilityFrame(key, selectedCopy + '<div class="facility-slots">' + state.activities.facilities[key].map(function (_, index) { return facilitySlot(key, index); }).join('') + '</div>');
+    var emergency = '';
+    if (key === 'infirmary' && emergencyTreatmentEligible()) {
+      var emergencyHero = selected && state.heroes[selected].injured && !heroBusy(selected) ? selected : Object.keys(E.HEROES).find(function (heroKey) { return state.heroes[heroKey].injured && !heroBusy(heroKey); });
+      emergency = '<aside class="emergency-treatment"><span class="label">Company safeguard</span><h2>Emergency Treatment</h2><p>The company has no deployable heroes and cannot afford normal treatment. Stabilise one selected injured hero at 25% Health and clear their Injury for 0 gold. This is not a full recovery.</p><button class="primary" data-action="emergency-treatment" data-hero="' + emergencyHero + '">Stabilise ' + E.HEROES[emergencyHero].name + '</button></aside>';
+    }
+    return facilityFrame(key, selectedCopy + emergency + '<div class="facility-slots">' + state.activities.facilities[key].map(function (_, index) { return facilitySlot(key, index); }).join('') + '</div>');
   }
 
   function town() { return state.activeBuilding ? facilityPanel(state.activeBuilding) : townScene(); }
@@ -694,7 +714,7 @@
     var cards = Object.keys(E.ENCOUNTERS).map(function (key) {
       var encounter = E.ENCOUNTERS[key], activity = state.activities.expeditions[key], result = state.expeditionResults[key], unlocked = expeditionUnlocked(key);
       var status;
-      if (!unlocked) status = '<div class="mission-locked">Complete ' + (key === 'briar-den' ? 'the Abandoned Road' : 'the Briar Den') + ' to unlock.</div>';
+      if (!unlocked) status = '<div class="mission-locked">Complete ' + (key === 'cinder-watch' ? 'the Briar Den' : 'the Abandoned Road') + ' to unlock.</div>';
       else if (result) status = '<button class="primary outcome-ready" data-action="review-expedition" data-expedition="' + key + '">Review outcome</button>';
       else if (activity) status = '<div class="mission-progress"><div><span>' + esc((E.APPROACHES[activity.approach] || E.APPROACHES.standard).name) + ' approach</span><strong data-countdown-key="expedition:' + key + '">' + timeText(remaining(activity)) + '</strong></div><div class="progress"><i data-progress-key="expedition:' + key + '" style="width:' + activityProgress(activity) + '%"></i></div><span>' + activity.party.map(function (heroKey) { return E.HEROES[heroKey].name.split(' ')[0]; }).join(', ') + (activity.party.length === 1 ? ' is' : ' are') + ' away</span></div>';
       else status = '<button class="primary" data-action="prepare-expedition" data-expedition="' + key + '"' + (key === 'abandoned-road' ? ' data-tutorial-target="mission-prepare"' : '') + '>Prepare company</button>';
@@ -710,7 +730,7 @@
     var baseDuration = state.selectedExpedition === 'abandoned-road' && !state.firstExpeditionComplete ? 5 : encounter.duration;
     var expectedDuration = Math.max(5, Math.round(baseDuration * approach.duration));
     var result = forecast();
-    var danger = result ? '<aside class="danger-panel"><span class="label">Serious outcome risk</span><strong class="danger-value">' + result.danger + '%</strong><div class="risk"><i style="width:' + result.danger + '%"></i></div><h3>' + (result.danger <= 10 ? 'Low risk' : result.danger <= 30 ? 'Viable' : result.danger <= 55 ? 'Manageable' : 'Risky') + '</h3><p class="danger-explainer">Chance of failure or an injury serious enough to require treatment.</p><dl><div><dt>Approach</dt><dd>' + approach.name + '</dd></div><div><dt>Duration</dt><dd>' + expectedDuration + ' sec</dd></div><div><dt>Success</dt><dd>' + result.successChance + '%</dd></div><div><dt>Injury</dt><dd>' + result.injuryChance + '%</dd></div><div class="wear-row"><dt>Expected wear</dt><dd>' + result.expectedHealthLoss + '% Health</dd></div></dl><button class="primary" data-action="send-expedition" data-tutorial-target="send-expedition">Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>' : '<aside class="danger-panel empty"><span class="label">Serious outcome risk</span><strong class="danger-value">—</strong><h3>No party selected</h3><p>Select at least one available hero.</p><button class="primary" disabled>Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>';
+    var danger = result ? '<aside class="danger-panel" data-tutorial-target="send-expedition"><span class="label">Serious outcome risk</span><strong class="danger-value">' + result.danger + '%</strong><div class="risk"><i style="width:' + result.danger + '%"></i></div><h3>' + (result.danger <= 10 ? 'Low risk' : result.danger <= 30 ? 'Viable' : result.danger <= 55 ? 'Manageable' : 'Risky') + '</h3><p class="danger-explainer">Chance of failure or an injury serious enough to require treatment.</p><dl><div><dt>Approach</dt><dd>' + approach.name + '</dd></div><div><dt>Duration</dt><dd>' + expectedDuration + ' sec</dd></div><div><dt>Success</dt><dd>' + result.successChance + '%</dd></div><div><dt>Injury</dt><dd>' + result.injuryChance + '%</dd></div><div class="wear-row"><dt>Expected wear</dt><dd>' + result.expectedHealthLoss + '% Health</dd></div></dl><button class="primary" data-action="send-expedition">Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>' : '<aside class="danger-panel empty"><span class="label">Serious outcome risk</span><strong class="danger-value">—</strong><h3>No party selected</h3><p>Select at least one available hero.</p><button class="primary" disabled>Send party</button><button class="secondary" data-action="cancel-preparation">Back</button></aside>';
     var partySlots = [0, 1, 2].map(function (index) { var key = state.selectedParty[index]; return key ? heroCompact(key, { selectable: true }) : emptyPartySlot(index); }).join('');
     var approaches = Object.keys(E.APPROACHES).map(function (key) { var approach = E.APPROACHES[key]; return '<button class="approach-option ' + (state.selectedApproach === key ? 'selected' : '') + '" data-action="select-approach" data-approach="' + key + '" aria-pressed="' + (state.selectedApproach === key) + '"><strong>' + approach.name + '</strong><span>' + approach.description + '</span></button>'; }).join('');
     var supplySlots = state.selectedSupplies.map(function (supplyKey, index) {
@@ -777,7 +797,7 @@
     var action = options.selectable ? ' data-action="select-inventory-item" data-item-id="' + item.id + '"' : '';
     var selected = options.selected ? ' selected' : '';
     var tag = options.selectable ? 'button' : 'div';
-    return '<' + tag + ' class="inventory-item-card' + selected + '"' + action + '><span class="item-icon">⚔</span><span class="item-card-copy"><span class="label">' + (item.rarity || 'Common') + ' ' + SLOT_LABELS[item.slot].toLowerCase() + ' weapon</span><strong>' + item.name + '</strong><span>Attack +' + item.attack + ' · ' + itemRoles(item) + '</span></span></' + tag + '>';
+    return '<' + tag + ' class="inventory-item-card' + selected + '"' + action + '><span class="item-icon">' + (item.icon || '⚔') + '</span><span class="item-card-copy"><span class="label">' + (item.rarity || 'Common') + ' ' + SLOT_LABELS[item.slot].toLowerCase() + ' weapon</span><strong>' + item.name + '</strong><span>Attack +' + item.attack + ' · ' + itemRoles(item) + '</span></span></' + tag + '>';
   }
 
   function moveProgression(key) {
@@ -833,8 +853,10 @@
     var selected = items.find(function (item) { return item.id === state.selectedInventoryItem; }) || items[0];
     var selectedCompatible = selected && (!choosing || itemCompatible(selected, heroKey, slot));
     var dismantleConfirm = selected && state.pendingDismantleId === selected.id;
-    var actions = selected ? (choosing ? '<button class="primary" data-action="equip-item" data-item-id="' + selected.id + '" data-hero="' + heroKey + '" data-tutorial-target="equip-sword" ' + (!selectedCompatible ? 'disabled' : '') + '>Equip ' + E.HEROES[heroKey].name.split(' ')[0] + '</button>' : dismantleConfirm ? '<div class="dismantle-confirm"><p>Dismantle this item for 1 Iron Ore? This cannot be undone.</p><button class="danger-button" data-action="confirm-dismantle" data-item-id="' + selected.id + '">Dismantle item</button><button class="secondary" data-action="cancel-dismantle">Keep item</button></div>' : '<button class="secondary" data-action="request-dismantle" data-item-id="' + selected.id + '">Dismantle for 1 Iron Ore</button>') : '';
-    var detail = selected ? '<aside class="inventory-detail"><span class="item-icon">⚔</span><span class="label">' + selected.rarity + ' equipment</span><h2>' + selected.name + '</h2><dl><div><dt>Slot</dt><dd>' + SLOT_LABELS[selected.slot] + '</dd></div><div><dt>Attack</dt><dd>+' + selected.attack + '</dd></div><div><dt>Usable by</dt><dd>' + itemRoles(selected) + '</dd></div><div><dt>Source</dt><dd>' + selected.source + '</dd></div></dl>' + actions + '</aside>' : (!choosing ? '<aside class="inventory-detail empty-detail"><span class="label">Company stores</span><h2>No equipment stored</h2><p>Forge equipment at the Workshop, then return here to inspect or dismantle it.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></aside>' : '');
+    var salvage = selected && selected.salvage || { key: 'iron-ore', quantity: 1 };
+    var salvageName = E.MATERIALS[salvage.key] ? E.MATERIALS[salvage.key].name : 'material';
+    var actions = selected ? (choosing ? '<button class="primary" data-action="equip-item" data-item-id="' + selected.id + '" data-hero="' + heroKey + '" data-tutorial-target="equip-sword" ' + (!selectedCompatible ? 'disabled' : '') + '>Equip ' + E.HEROES[heroKey].name.split(' ')[0] + '</button>' : dismantleConfirm ? '<div class="dismantle-confirm"><p>Dismantle this item for ' + salvage.quantity + ' ' + salvageName + '? This cannot be undone.</p><button class="danger-button" data-action="confirm-dismantle" data-item-id="' + selected.id + '">Dismantle item</button><button class="secondary" data-action="cancel-dismantle">Keep item</button></div>' : '<button class="secondary" data-action="request-dismantle" data-item-id="' + selected.id + '">Dismantle for ' + salvage.quantity + ' ' + salvageName + '</button>') : '';
+    var detail = selected ? '<aside class="inventory-detail"><span class="item-icon">' + (selected.icon || '⚔') + '</span><span class="label">' + selected.rarity + ' equipment</span><h2>' + selected.name + '</h2><dl><div><dt>Slot</dt><dd>' + SLOT_LABELS[selected.slot] + '</dd></div><div><dt>Attack</dt><dd>+' + selected.attack + '</dd></div><div><dt>Usable by</dt><dd>' + itemRoles(selected) + '</dd></div><div><dt>Source</dt><dd>' + selected.source + '</dd></div></dl>' + actions + '</aside>' : (!choosing ? '<aside class="inventory-detail empty-detail"><span class="label">Company stores</span><h2>No equipment stored</h2><p>Forge equipment at the Workshop, then return here to inspect or dismantle it.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></aside>' : '');
     var current = choosing ? equippedItem(heroKey, slot) : null;
     var chooser = choosing ? '<header class="equipment-choice-header"><div><span class="eyebrow">Equipping ' + E.HEROES[heroKey].name + '</span><h1>Choose ' + SLOT_LABELS[slot] + '</h1><p>Showing equipment compatible with this hero and slot.</p></div><button class="secondary" data-action="cancel-equipment-choice">Cancel</button></header>' + (current ? '<div class="current-equipment"><span>Currently equipped</span><strong>' + current.name + '</strong><button class="secondary small-button" data-action="unequip-item" data-hero="' + heroKey + '" data-slot="' + slot + '" ' + (inventoryFull() ? 'disabled' : '') + '>Unequip</button></div>' : '') + (incompatible.length ? '<button class="filter-toggle" data-action="toggle-incompatible">' + (state.showIncompatibleItems ? 'Hide' : 'Show') + ' ' + incompatible.length + ' incompatible item' + (incompatible.length === 1 ? '' : 's') + '</button>' : '') : heading('Company stores', 'Inventory', 'Browse company equipment. To equip an item, begin from a hero’s equipment slot in the Roster.');
     var cells = items.map(function (item) { return itemCard(item, { selectable: true, selected: selected && selected.id === item.id }); }).join('');
@@ -870,10 +892,13 @@
       'equip-sword': { title: 'Equip Elara', copy: 'The Inventory is filtered for Elara’s Main hand. Equip the Iron Sword.' },
       'town-recovery': { title: 'Recover ' + recoveryHero, copy: recoveryHero + (recovery.facility === 'infirmary' ? ' is Injured. The Infirmary restores Health and clears the Injury, but it will not restore Mana or Readiness.' : ' has the greatest ordinary recovery need. The Tavern gradually restores Health, Mana and Readiness, and heroes may leave early.') },
       'assign-recovery': { title: 'Begin recovery', copy: recoveryHero + ' is selected in the roster. Choose this slot, or drag the hero here from the right.' },
-      'expeditions-next': { title: 'Keep the company working', copy: recoveryHero + ' is unavailable while recovering, but any other healthy heroes can take the next expedition.' }
+      'tutorial-complete': { title: 'Tutorial complete', copy: recoveryHero + ' is recovering. The company is now yours to manage: keep healthy heroes working while others rest, craft or receive treatment.' }
     };
     var step = steps[state.tutorial];
-    return step ? '<div class="tutorial-shade"></div><aside class="tutorial-card" role="status"><span class="label">Guided opening</span><h3>' + step.title + '</h3><p>' + step.copy + '</p><button class="ghost" data-action="skip-tutorial">Skip tutorial</button></aside>' : '';
+    if (!step) return '';
+    var passive = state.tutorial === 'crafting';
+    var complete = state.tutorial === 'tutorial-complete';
+    return (passive ? '' : '<div class="tutorial-shade"></div>') + '<aside class="tutorial-card ' + (passive ? 'passive ' : '') + (complete ? 'complete' : '') + '" role="status"><span class="label">' + (complete ? 'Guided opening complete' : 'Guided opening') + '</span><h3>' + step.title + '</h3><p>' + step.copy + '</p>' + (complete ? '<button class="primary" data-action="finish-tutorial">Continue</button>' : '<button class="ghost" data-action="skip-tutorial">Skip tutorial</button>') + '</aside>';
   }
 
   function devPanel() {
@@ -893,7 +918,7 @@
     var map = {
       'town-expeditions': 'nav-expeditions', 'expedition-prepare': 'mission-prepare', 'party-send': 'send-expedition', 'claim-rewards': 'claim-rewards',
       'return-town-workshop': 'nav-town', 'town-workshop': 'building-workshop', forge: 'forge', 'open-roster': 'nav-roster',
-      'open-main-hand': 'main-hand-slot', 'equip-sword': 'equip-sword', 'town-recovery': 'building-' + recovery.facility, 'assign-recovery': 'facility-slot-0', 'expeditions-next': 'nav-expeditions'
+      'open-main-hand': 'main-hand-slot', 'equip-sword': 'equip-sword', 'town-recovery': 'building-' + recovery.facility, 'assign-recovery': 'facility-slot-0'
     };
     return map[state.tutorial] || null;
   }
@@ -926,7 +951,7 @@
     var app = document.getElementById('app');
     if (state.stage === 'intro') { app.innerHTML = intro(); bind(); return; }
     var notice = state.notice ? '<div class="notice">' + esc(state.notice) + '</div>' : '';
-    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.7.1</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
+    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.7.2</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
     bind(); applyTutorialSpotlight();
   }
 
@@ -983,7 +1008,6 @@
     if (state.tutorial === 'town-expeditions' && view === 'expeditions') patch.tutorial = 'expedition-prepare';
     if (state.tutorial === 'return-town-workshop' && view === 'town') patch.tutorial = 'town-workshop';
     if (state.tutorial === 'open-roster' && view === 'roster') { patch.tutorial = 'open-main-hand'; patch.selectedHero = 'elara'; }
-    if (state.tutorial === 'expeditions-next' && view === 'expeditions') patch.tutorial = null;
     if (view === 'inventory' && !state.workshopOutput && state.completedActivity && state.completedActivity.type === 'craft') patch.completedActivity = null;
     set(patch);
   }
@@ -1030,7 +1054,7 @@
     state.gold -= cost;
     state.activities.facilities[facilityKey][index] = { type: 'facility', title: facility.activity, hero: hero, startedAt: Date.now(), endsAt: Date.now() + duration * 1000, duration: duration, rates: facility.rates, startState: Object.assign({}, state.heroes[hero]) };
     var patch = { selectedHero: hero, notice: E.HEROES[hero].name + ' has begun ' + facility.activity + '.' };
-    if (state.tutorial === 'assign-recovery') patch.tutorial = 'expeditions-next';
+    if (state.tutorial === 'assign-recovery') patch.tutorial = 'tutorial-complete';
     set(patch);
   }
 
@@ -1073,6 +1097,11 @@
     if (action === 'close-building') set({ activeBuilding: null });
     if (action === 'open-building' && data.building) openBuilding(data.building);
     if (action === 'assign-facility') assignFacility(state.selectedHero, data.facility, Number(data.slot));
+    if (action === 'emergency-treatment' && data.hero && emergencyTreatmentEligible() && state.heroes[data.hero] && state.heroes[data.hero].injured && !heroBusy(data.hero)) {
+      state.heroes[data.hero].health = Math.max(25, state.heroes[data.hero].health);
+      state.heroes[data.hero].injured = false;
+      set({ selectedHero: data.hero, notice: E.HEROES[data.hero].name + ' received emergency stabilisation and is deployable at ' + state.heroes[data.hero].health + '% Health.' });
+    }
     if (action === 'leave-facility' && data.facility && state.activities.facilities[data.facility]) {
       var leaveSlot = Number(data.slot), leaving = state.activities.facilities[data.facility][leaveSlot];
       if (leaving) {
@@ -1107,9 +1136,9 @@
     if (action === 'confirm-dismantle' && data.itemId && state.pendingDismantleId === data.itemId) {
       var dismantleIndex = state.inventory.findIndex(function (item) { return item.id === data.itemId; });
       if (dismantleIndex >= 0) {
-        var dismantled = state.inventory[dismantleIndex];
-        state.inventory.splice(dismantleIndex, 1); state.materials['iron-ore'] += 1;
-        set({ selectedInventoryItem: null, pendingDismantleId: null, notice: dismantled.name + ' dismantled. 1 Iron Ore recovered.' });
+        var dismantled = state.inventory[dismantleIndex], recovered = dismantled.salvage || { key: 'iron-ore', quantity: 1 };
+        state.inventory.splice(dismantleIndex, 1); state.materials[recovered.key] = Number(state.materials[recovered.key] || 0) + recovered.quantity;
+        set({ selectedInventoryItem: null, pendingDismantleId: null, notice: dismantled.name + ' dismantled. ' + recovered.quantity + ' ' + E.MATERIALS[recovered.key].name + ' recovered.' });
       }
     }
     if (action === 'store-workshop-output' && state.workshopOutput && !inventoryFull()) {
@@ -1122,7 +1151,7 @@
       if (data.activity === 'craft') set({ view: 'town', activeBuilding: 'workshop' });
       if (data.activity === 'craft-ready') set(state.workshopOutput ? { view: 'town', activeBuilding: 'workshop' } : { view: 'inventory', activeBuilding: null, completedActivity: null });
     }
-    if (action === 'skip-tutorial') set({ tutorial: null, tutorialSkipped: true });
+    if (action === 'skip-tutorial' || action === 'finish-tutorial') set({ tutorial: null, tutorialSkipped: true });
     if (action === 'dev') set({ devOpen: !state.devOpen });
     if (action === 'set-hero-state') {
       var levelInput = document.getElementById('hero-level');

@@ -94,8 +94,12 @@ for(let i=0;i<12;i+=1){
 assert.ok(logs.size>1,'Different seeds should produce variable encounter logs');
 
 assert.deepEqual(Object.keys(E.APPROACHES),['careful','standard','aggressive','scavenge'],'The four agreed expedition approaches must remain available');
-assert.deepEqual(Object.keys(E.MATERIALS),['iron-ore','common-herb'],'Prototype loot must use inventory materials rather than global Scrap and Herbs');
-assert.deepEqual(Object.keys(E.ENCOUNTERS),['abandoned-road','briar-den','cinder-watch'],'The expedition foundation should expose three distinct locations');
+assert.deepEqual(Object.keys(E.MATERIALS),['iron-ore','common-herb','ashwood','tanned-hide'],'Prototype loot must use inventory materials rather than global Scrap and Herbs');
+assert.deepEqual(Object.keys(E.ENCOUNTERS),['abandoned-road','forage-outskirts','briar-den','cinder-watch'],'The expedition foundation should expose the recovery route and three core locations');
+const foragePreview=E.rewardPreview('forage-outskirts','standard');
+assert.deepEqual(foragePreview.gold,[5,8],'Forage the Outskirts must guarantee a small gold return');
+assert.ok(foragePreview.xp<=5,'Forage the Outskirts must not be an attractive levelling exploit');
+assert.ok(E.ENCOUNTERS['forage-outskirts'].rewards.lootTable.every(entry=>entry.key===null||['ashwood','common-herb','tanned-hide'].includes(entry.key)),'The recovery expedition must contain common materials only');
 assert.equal(E.rewardPreview('abandoned-road','scavenge').lootSlots,E.rewardPreview('abandoned-road','standard').lootSlots+1,'Scavenge must add one loot-table roll');
 assert.ok(E.rewardPreview('abandoned-road','aggressive').gold[1]>E.rewardPreview('abandoned-road','standard').gold[1],'Aggressive must improve the displayed gold range');
 assert.ok(E.heroAdvantages('elara','abandoned-road').length>0,'Elara’s Armour should favour her on the physical road');
@@ -104,6 +108,10 @@ assert.ok(E.heroAdvantages('orin','cinder-watch').length>0,'Orin’s Ward and Fi
 const carefulForecast=E.forecast({party:['elara'],encounterKey:'abandoned-road',approach:'careful',seed:'approach-test',samples:400});
 const aggressiveForecast=E.forecast({party:['elara'],encounterKey:'abandoned-road',approach:'aggressive',seed:'approach-test',samples:400});
 assert.ok(carefulForecast.danger<=aggressiveForecast.danger,'Careful must not be more dangerous than Aggressive for identical inputs');
+Object.keys(E.HEROES).forEach(key=>{
+  const forageDanger=E.forecast({party:[key],encounterKey:'forage-outskirts',approach:'standard',seed:'forage-safety',samples:800}).danger;
+  assert.ok(forageDanger<=5,key+' should face very low injury risk on Forage the Outskirts');
+});
 
 function statesAtLevel(level){
   const states={};

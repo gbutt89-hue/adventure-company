@@ -4,7 +4,7 @@ Read this first for implementation work. Treat the code as authoritative if this
 
 ## Current product
 
-- **Prototype:** 0.7.1, save schema 8, deployed as a static installable PWA on GitHub Pages.
+- **Prototype:** 0.7.2, save schema 8, pending deployment as a static installable PWA on GitHub Pages.
 - **Premise:** manage a persistent fantasy adventuring company. Prepare one to three heroes, equipment, approach and supplies; send them on autonomous timed expeditions; review the seeded combat account; then recover, craft and improve the company.
 - **Product direction:** fun-first, low-animation and system-led, with modest development scope. Avoid exploitative gacha and intrusive advertising. The current slice validates the Town, expedition, recovery, equipment and supply loop.
 
@@ -32,12 +32,12 @@ build.mjs -> dist/ -> GitHub Pages
 - **Heroes and progression:** four fixed heroes/classes, class-specific stat growth, XP/levels, multi-trait display/effects, class moves through level 5, physical/magical damage, Armour/Ward, Speed/Evasion/Accuracy/Critical and Fire Resistance.
 - **Combat:** deterministic seeded automatic combat with named hero/enemy moves, action order, misses, criticals, mitigation, healing and retrospective logs. Zero Health causes Injury, never death. Total party incapacitation awards no XP.
 - **Forecasting:** 400 simulations using current condition, equipment, approach and supplies; reports serious-outcome danger, success, injury chance and expected Health loss.
-- **Expeditions:** Abandoned Road, Briar Den and Cinder Watch; staged unlocks, Favoured explanations, approach-adjusted reward previews, weighted material loot tables, one active party per location and concurrent expeditions at different locations. Party size is 1–3. Approaches are Careful, Standard, Aggressive and Scavenge.
-- **Condition and recovery:** Health, persistent Mana and Readiness. Tavern has two slots and gradually restores all three; leaving early preserves accrued recovery and the roster rail projects it live. Injured heroes must use the one-slot Infirmary, which restores Health faster and clears Injury only when treatment completes; it restores neither Mana nor Readiness. No passive recovery.
+- **Expeditions:** Abandoned Road, low-risk Forage the Outskirts, Briar Den and Cinder Watch; staged unlocks, Favoured explanations, approach-adjusted reward previews, weighted material loot tables, one active party per location and concurrent expeditions at different locations. Party size is 1–3. Approaches are Careful, Standard, Aggressive and Scavenge.
+- **Condition and recovery:** Health, persistent Mana and Readiness. Tavern has two slots and gradually restores all three; leaving early preserves accrued recovery and the roster rail projects it live. Injured heroes must use the one-slot Infirmary, which restores Health faster and clears Injury only when treatment completes; it restores neither Mana nor Readiness. Emergency Treatment clears one selected Injury at 25% Health only when no hero is deployable and normal treatment is unaffordable. No passive recovery.
 - **Supplies:** two-slot party pouch beneath party selection. Field Tonics and Mana Draughts show separate Trigger and On use effects, are reserved on departure, used automatically at defined thresholds and returned if unused. Forecasts and logs include them.
 - **Town:** spatial hub with Tavern, Workshop and Infirmary active; Guild Hall and Temple are labelled future facilities. Persistent roster rail/drawer shows live condition and activity.
-- **Crafting and inventory:** timed Workshop, Craft XP, Iron Sword, Field Tonic and Mana Draught recipes. Iron Ore and Common Herb are inventory materials obtained through loot rolls; Gold is the only global currency. Twelve equipment-storage slots, safe Workshop overflow, filtering by hero/slot, equip/unequip and dismantling. Materials and consumables stack separately.
-- **Equipment:** nine visible slots: main hand, off hand, head, neck, chest, legs, feet, ring and trinket. Only the Iron Sword is currently implemented; it gives +4 Attack and is usable by Vanguard, Ranger and Skirmisher. Engine support exists for future equipment loot modifiers.
+- **Crafting and inventory:** timed Workshop, Craft XP, three base weapons and two supply recipes. Iron Ore, Common Herb, Ashwood and Tanned Hide are inventory materials obtained through loot rolls; Gold is the only global currency. Twelve equipment-storage slots, safe Workshop overflow, filtering by hero/slot, equip/unequip and material-aware dismantling. Materials and consumables stack separately.
+- **Equipment:** nine visible slots: main hand, off hand, head, neck, chest, legs, feet, ring and trinket. Iron Sword, Ashwood Club and Hunting Bow are implemented as fixed base-tier weapons. Engine support exists for future equipment loot modifiers.
 - **Tutorial/admin/PWA:** guided opening with interaction locking/highlights, context-sensitive recovery recommendation, five-second first expedition and first Iron Sword craft, seed controls, timer completion, hero condition/level controls, encounter replay, save import/export, offline shell and install prompt.
 
 ## Design invariants
@@ -87,6 +87,6 @@ build.mjs -> dist/ -> GitHub Pages
 
 ## Immediate development state
 
-- 0.7.1 adds the first loot-table/material model and corrects preparation and recovery usability before the broader 0.7.5 balance pass.
-- Next, validate recovery pacing, potion consumption/return behaviour, tutorial clarity, loot-slot outcomes and early Gold/material pressure. Fix concrete defects before broadening scope.
+- 0.7.2 closes the all-Injured/no-Gold softlock, adds the normal-system Forage recovery route, expands base crafting content and finishes the opening tutorial hand-off.
+- Next, validate Emergency Treatment gating, Forage risk/yield, tutorial clarity, loot-slot outcomes and early Gold/material pressure. Fix concrete defects before broadening scope.
 - Once this loop is stable, the next agreed major system is **recruitment and roster growth**, followed by prestige/progression bands and deeper item/crafting generation. Do not start these as incidental refactors.

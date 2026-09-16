@@ -96,6 +96,10 @@
     'cinder-guard': [
       { name: 'Cinder Blade', power: 1, accuracy: 3, critical: 2, wardPiercing: 2, damageType: 'magical', fire: true },
       { name: 'Ashen Crush', power: 1.2, accuracy: -7, critical: 7, wardPiercing: 3, damageType: 'magical', fire: true }
+    ],
+    'outskirts-vermin': [
+      { name: 'Nip', power: 0.7, accuracy: 0, critical: 0, armourPiercing: 0, damageType: 'physical' },
+      { name: 'Scramble', power: 0.55, accuracy: 6, critical: 0, armourPiercing: 0, damageType: 'physical' }
     ]
   };
 
@@ -108,7 +112,9 @@
 
   const MATERIALS = {
     'iron-ore': { key: 'iron-ore', name: 'Iron Ore', icon: '⬟', description: 'A common forging material used for dependable metal equipment.' },
-    'common-herb': { key: 'common-herb', name: 'Common Herb', icon: '❧', description: 'A common alchemical ingredient used in basic expedition supplies.' }
+    'common-herb': { key: 'common-herb', name: 'Common Herb', icon: '❧', description: 'A common alchemical ingredient used in basic expedition supplies.' },
+    ashwood: { key: 'ashwood', name: 'Ashwood', icon: '⌁', description: 'Straight, resilient timber used for simple weapons.' },
+    'tanned-hide': { key: 'tanned-hide', name: 'Tanned Hide', icon: '▱', description: 'Common worked hide used for grips, bindings and light equipment.' }
   };
 
   const SUPPLIES = {
@@ -141,6 +147,23 @@
         { key: 'bruiser', name: 'Bandit Bruiser', maxHealth: 24, attack: 7, armour: 3, ward: 0, speed: 7, accuracy: 88, evasion: 3, damageType: 'physical' }
       ],
       favoured: [{ stat: 'armour', minimum: 5, reason: 'High Armour reduces the road bandits’ physical damage.' }]
+    },
+    'forage-outskirts': {
+      key: 'forage-outskirts', name: 'Forage the Outskirts', region: 'Town Bounds', level: 1, duration: 18,
+      description: 'Search the hedgerows and neglected coppices beyond town for modest supplies and paid odd jobs.',
+      tags: ['Very Easy', 'Common resources', 'Recovery work'],
+      rewards: { gold: [5, 8], lootSlots: 2, xp: 4, lootTable: [
+        { key: 'ashwood', weight: 45, quantity: [1, 2] },
+        { key: 'common-herb', weight: 30, quantity: [1, 1] },
+        { key: 'tanned-hide', weight: 15, quantity: [1, 1] },
+        { key: null, weight: 10, quantity: [0, 0] }
+      ] },
+      opening: ['The company checks abandoned snares and windfallen branches beyond the town wall.', 'A noticeboard offers a few coins for clearing vermin from a grain shed.', 'The outskirts are quiet, but useful scraps remain for patient hands.'],
+      victory: ['The work is uneventful and the company returns with a modest haul.', 'The last vermin scatters. A local farmer pays the promised few coins.', 'Nothing glorious happened, but the company brings home useful supplies.'],
+      enemies: [
+        { key: 'outskirts-vermin', name: 'Outskirts Vermin', maxHealth: 10, attack: 3, armour: 0, ward: 0, speed: 8, accuracy: 70, evasion: 2, damageType: 'physical' }
+      ],
+      favoured: []
     },
     'briar-den': {
       key: 'briar-den', name: 'Briar Den', region: 'Greenward', level: 2, duration: 32,

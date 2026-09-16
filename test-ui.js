@@ -17,6 +17,7 @@ assert.match(source, /function bindTooltips/, 'All contextual help must share vi
 assert.doesNotMatch(source, /function helpPanel/, 'Help must be contextual rather than occupying a permanent panel');
 assert.match(source, /first \? 5 : encounter\.duration/, 'The guided first expedition must be shortened to five seconds');
 assert.match(source, /state\.tutorial === 'forge' && recipe\.key === 'iron-sword' \? 5 : recipe\.duration/, 'The guided first craft must be shortened to five seconds');
+assert.match(source, /data-tutorial-target="send-expedition"/, 'The whole forecast panel must lift above the tutorial shade so Send party remains clear');
 
 function renderState(savedState, storageKey) {
   const app = { innerHTML: '' };
@@ -127,6 +128,35 @@ const injuredForTavern = renderState(playing({
 assert.match(injuredForTavern, /Injured heroes require treatment at the Infirmary/);
 assert.match(injuredForTavern, /data-action="assign-facility" data-facility="tavern" data-slot="0" disabled/, 'An injured hero must not use the Tavern instead of treatment');
 
+const softlockedInfirmary = renderState(playing({
+  activeBuilding: 'infirmary', selectedHero: 'fen', gold: 0,
+  heroes: {
+    elara: { health: 3, injured: true }, fen: { health: 8, injured: true },
+    orin: { health: 10, injured: true }, sable: { health: 5, injured: true }
+  }
+}));
+assert.match(softlockedInfirmary, /Emergency Treatment/);
+assert.match(softlockedInfirmary, /data-action="emergency-treatment" data-hero="fen"/, 'The player-selected injured hero must be the explicit emergency-treatment target');
+assert.match(softlockedInfirmary, /25% Health/);
+assert.match(softlockedInfirmary, /0 gold/);
+const affordableInfirmary = renderState(playing({
+  activeBuilding: 'infirmary', selectedHero: 'fen', gold: 15,
+  heroes: {
+    elara: { health: 3, injured: true }, fen: { health: 8, injured: true },
+    orin: { health: 10, injured: true }, sable: { health: 5, injured: true }
+  }
+}));
+assert.doesNotMatch(affordableInfirmary, /Emergency Treatment/, 'Emergency Treatment must disappear when normal treatment is affordable');
+const rewardsAvailableInfirmary = renderState(playing({
+  activeBuilding: 'infirmary', selectedHero: 'fen', gold: 0,
+  heroes: {
+    elara: { health: 3, injured: true }, fen: { health: 8, injured: true },
+    orin: { health: 10, injured: true }, sable: { health: 5, injured: true }
+  },
+  expeditionResults: { 'abandoned-road': { rewards: { gold: 20, materials: {}, xp: 0 } } }
+}));
+assert.doesNotMatch(rewardsAvailableInfirmary, /Emergency Treatment/, 'Unclaimed affordable treatment money must prevent free stabilisation');
+
 const roster = renderState(playing({ view: 'roster' }));
 assert.match(roster, />Ward</);
 assert.match(roster, />Evasion</);
@@ -214,6 +244,8 @@ assert.doesNotMatch(preparation, /favoured-popover/, 'Favoured must use the shar
 
 const expeditionBoard = renderState(playing({ view: 'expeditions', firstExpeditionComplete: true, completedExpeditions: { 'briar-den': 1 } }));
 assert.match(expeditionBoard, /Abandoned Road/);
+assert.match(expeditionBoard, /Forage the Outskirts/);
+assert.match(expeditionBoard, /Very Easy/);
 assert.match(expeditionBoard, /Briar Den/);
 assert.match(expeditionBoard, /Cinder Watch/);
 
@@ -242,6 +274,18 @@ assert.doesNotMatch(inventory, /data-action="equip-item"/);
 assert.match(inventory, /Company supplies/);
 assert.match(inventory, /Recovered materials/);
 assert.match(inventory, /2 available/);
+
+const expandedWorkshop = renderState(playing({ view: 'town', activeBuilding: 'workshop', gold: 99, materials: { 'iron-ore': 9, 'common-herb': 9, ashwood: 9, 'tanned-hide': 9 } }));
+assert.match(expandedWorkshop, /Ashwood Club/);
+assert.match(expandedWorkshop, /Hunting Bow/);
+assert.match(expandedWorkshop, /2 Ashwood/);
+
+const craftingTutorial = renderState(playing({ view: 'town', activeBuilding: 'workshop', tutorialSkipped: false, tutorial: 'crafting', activities: { expeditions: {}, craft: { recipeKey: 'iron-sword', title: 'Iron Sword', startedAt: Date.now(), endsAt: Date.now() + 5000, duration: 5 }, facilities: { tavern: [null, null], infirmary: [null] } } }));
+assert.doesNotMatch(craftingTutorial, /class="tutorial-shade"/, 'The guided craft wait must keep the game screen light');
+assert.match(craftingTutorial, /tutorial-card passive/);
+const tutorialComplete = renderState(playing({ tutorialSkipped: false, tutorial: 'tutorial-complete' }));
+assert.match(tutorialComplete, /Guided opening complete/);
+assert.match(tutorialComplete, /data-action="finish-tutorial"/);
 
 const fullItems = Array.from({ length: 12 }, (_, index) => ({ id: 'sword-' + index, key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Test' }));
 const fullWorkshop = renderState(playing({ view: 'town', activeBuilding: 'workshop', gold: 999, materials: { 'iron-ore': 999, 'common-herb': 999 }, inventory: fullItems }));
