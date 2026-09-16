@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.7
+## Prototype 0.7.1
 
 The current slice covers:
 
@@ -44,8 +44,13 @@ The current slice covers:
 - five-second guided expedition and first craft timings with explicit tutorial explanations
 - a two-slot expedition supply pouch with reserved stock, automatic conditional use and unused-item returns
 - Field Tonic and Mana Draught crafting, storage, forecasting and encounter-log integration
+- explicit Trigger and On use descriptions for expedition supplies
 - condition-based Tavern recovery for Health, Mana and Readiness, including early departure with partial benefit
 - a faster Health-focused Infirmary that treats persistent Injuries without restoring Mana or Readiness
+- live recovery projections in the roster rail and enforced Infirmary treatment for Injured heroes
+- approach-adjusted reward previews and weighted per-expedition loot tables
+- Iron Ore and Common Herbs stored as inventory materials rather than global resources
+- no XP when every dispatched hero returns Injured
 
 The game is deliberately data-led and low-animation. The current goal is to validate the Town, expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.
 
