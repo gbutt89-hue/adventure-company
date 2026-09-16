@@ -61,9 +61,9 @@
   };
 
   var CRAFT_RECIPES = {
-    'iron-sword': { key: 'iron-sword', name: 'Iron Sword', icon: '⚔', label: 'Common main-hand weapon', description: 'Attack +4. Usable by a Vanguard, Ranger or Skirmisher.', gold: 15, scrap: 3, herbs: 0, duration: 30, xp: 18, outputType: 'equipment' },
-    'field-tonic': { key: 'field-tonic', name: 'Field Tonic', icon: '✚', label: 'Expedition supply', description: E.SUPPLIES['field-tonic'].description, gold: 4, scrap: 0, herbs: 1, duration: 12, xp: 8, outputType: 'supply' },
-    'mana-draught': { key: 'mana-draught', name: 'Mana Draught', icon: '◆', label: 'Expedition supply', description: E.SUPPLIES['mana-draught'].description, gold: 6, scrap: 0, herbs: 1, duration: 15, xp: 10, outputType: 'supply' }
+    'iron-sword': { key: 'iron-sword', name: 'Iron Sword', icon: '⚔', label: 'Common main-hand weapon', description: 'Attack +4. Usable by a Vanguard, Ranger or Skirmisher.', gold: 15, materials: { 'iron-ore': 3 }, duration: 30, xp: 18, outputType: 'equipment' },
+    'field-tonic': { key: 'field-tonic', name: 'Field Tonic', icon: '✚', label: 'Expedition supply', description: E.SUPPLIES['field-tonic'].description, gold: 4, materials: { 'common-herb': 1 }, duration: 12, xp: 8, outputType: 'supply' },
+    'mana-draught': { key: 'mana-draught', name: 'Mana Draught', icon: '◆', label: 'Expedition supply', description: E.SUPPLIES['mana-draught'].description, gold: 6, materials: { 'common-herb': 1 }, duration: 15, xp: 10, outputType: 'supply' }
   };
 
   function emptyEquipment() {
@@ -74,8 +74,8 @@
 
   function fresh() {
     return {
-      saveVersion: 7, stage: 'intro', view: 'town', expeditionScreen: 'list', activeBuilding: null,
-      companyName: '', gold: 20, scrap: 0, herbs: 0, seed: '731942', runNumber: 0,
+      saveVersion: 8, stage: 'intro', view: 'town', expeditionScreen: 'list', activeBuilding: null,
+      companyName: '', gold: 20, materials: { 'iron-ore': 0, 'common-herb': 0 }, seed: '731942', runNumber: 0,
       selectedParty: ['elara', 'fen', 'orin'], selectedHero: 'elara', selectedExpedition: 'abandoned-road', selectedApproach: 'standard', selectedSupplies: [null, null], firstExpeditionComplete: false,
       tutorial: 'town-expeditions', tutorialSkipped: false, rosterOpen: false, devOpen: false, notice: null,
       currentResult: null, lastResult: null, resultContext: null, resultClaimed: false, expeditionResults: {}, completedExpeditions: {},
@@ -96,9 +96,11 @@
   function migrate(old) {
     var next = fresh();
     if (!old || typeof old !== 'object') return next;
-    ['companyName', 'gold', 'scrap', 'herbs', 'seed', 'runNumber', 'craftXp', 'lastCraftXpGain', 'tutorialSkipped', 'resultContext', 'resultClaimed'].forEach(function (key) {
+    ['companyName', 'gold', 'seed', 'runNumber', 'craftXp', 'lastCraftXpGain', 'tutorialSkipped', 'resultContext', 'resultClaimed'].forEach(function (key) {
       if (old[key] !== undefined) next[key] = old[key];
     });
+    next.materials['iron-ore'] = Math.max(0, Math.floor(Number(old.scrap) || 0));
+    next.materials['common-herb'] = Math.max(0, Math.floor(Number(old.herbs) || 0));
     if (old.heroes) next.heroes = Object.assign(next.heroes, old.heroes);
     if (old.companyName) next.stage = 'playing';
     next.firstExpeditionComplete = Boolean(old.swordCrafted || old.swordEquipped || old.runNumber > 0);
@@ -120,7 +122,16 @@
   function normalise(value) {
     var base = fresh();
     var next = Object.assign(base, value || {});
-    next.saveVersion = 7;
+    var incomingVersion = Number(next.saveVersion || 0);
+    next.saveVersion = 8;
+    next.materials = Object.assign({}, base.materials, next.materials || {});
+    if (incomingVersion < 8) {
+      next.materials['iron-ore'] += Math.max(0, Math.floor(Number(next.scrap) || 0));
+      next.materials['common-herb'] += Math.max(0, Math.floor(Number(next.herbs) || 0));
+    }
+    Object.keys(E.MATERIALS).forEach(function (key) { next.materials[key] = Math.max(0, Math.floor(Number(next.materials[key]) || 0)); });
+    delete next.scrap;
+    delete next.herbs;
     next.heroes = Object.assign(base.heroes, next.heroes || {});
     next.equipment = Object.assign(base.equipment, next.equipment || {});
     Object.keys(E.HEROES).forEach(function (key) { next.equipment[key] = Object.assign(emptyEquipment(), next.equipment[key] || {}); });
@@ -135,6 +146,14 @@
       next.activities.expeditions[key] = Object.assign({ encounterKey: key, title: E.ENCOUNTERS[key].name, approach: 'standard' }, next.activities.expeditions[key]);
     });
     next.expeditionResults = Object.assign({}, next.expeditionResults || {});
+    Object.keys(next.expeditionResults).forEach(function (key) {
+      var legacyRewards = next.expeditionResults[key] && next.expeditionResults[key].rewards;
+      if (legacyRewards && !legacyRewards.materials) {
+        legacyRewards.materials = { 'iron-ore': Math.max(0, Number(legacyRewards.scrap) || 0), 'common-herb': Math.max(0, Number(legacyRewards.herbs) || 0) };
+        delete legacyRewards.scrap;
+        delete legacyRewards.herbs;
+      }
+    });
     next.completedExpeditions = Object.assign({}, next.completedExpeditions || {});
     if (next.currentResult && next.resultContext !== 'admin' && next.expeditionScreen === 'results' && !next.expeditionResults['abandoned-road']) {
       next.expeditionResults['abandoned-road'] = next.currentResult;
@@ -217,7 +236,7 @@
     return bonuses;
   }
   function equipmentExpeditionModifiers(party) {
-    var modifiers = { gold: 0, materials: 0, herbs: 0 };
+    var modifiers = { gold: 0, materials: 0 };
     (party || Object.keys(state.equipment)).forEach(function (heroKey) {
       Object.keys(state.equipment[heroKey]).forEach(function (slot) {
         var item = state.equipment[heroKey][slot], effects = item && item.expeditionModifiers;
@@ -231,6 +250,9 @@
   function effectiveHeroStats(key) { return E.effectiveStats(key, { xp: state.heroes[key].xp, readiness: state.heroes[key].readiness, weaponBonus: equipmentAttack()[key] }); }
   function packedSupplies() { return state.selectedSupplies.filter(function (key) { return Boolean(E.SUPPLIES[key]); }); }
   function supplyCount(list, key) { return list.filter(function (entry) { return entry === key; }).length; }
+  function hasRecipeMaterials(recipe) { return Object.keys(recipe.materials || {}).every(function (key) { return Number(state.materials[key] || 0) >= recipe.materials[key]; }); }
+  function materialCosts(recipe) { return Object.keys(recipe.materials || {}).map(function (key) { return recipe.materials[key] + ' ' + E.MATERIALS[key].name; }); }
+  function addMaterials(materials) { Object.keys(materials || {}).forEach(function (key) { state.materials[key] = Number(state.materials[key] || 0) + Number(materials[key] || 0); }); }
   function heroUnavailable(key) { return heroBusy(key) || Boolean(state.heroes[key] && state.heroes[key].injured); }
 
   function recoveryRecommendation() {
@@ -260,6 +282,7 @@
 
   function facilityNeeded(facilityKey, heroKey) {
     var facility = FACILITIES[facilityKey], hero = state.heroes[heroKey], stats = effectiveHeroStats(heroKey);
+    if (hero.injured && facilityKey !== 'infirmary') return false;
     if (facilityKey === 'infirmary' && hero.injured) return true;
     return Object.keys(facility.rates || {}).some(function (stat) { return hero[stat] < (stat === 'mana' ? stats.maxMana : 100); });
   }
@@ -327,7 +350,14 @@
       if (expedition.endsAt > now) return;
       var beforeStates = expedition.heroStates || state.heroes;
       var result = E.simulateBattle({ party: expedition.party, heroStates: beforeStates, equipmentAttack: expedition.equipmentAttack, rewardModifiers: expedition.rewardModifiers || {}, supplies: expedition.supplies || [], seed: expedition.seed, encounterKey: expeditionKey, approach: expedition.approach, includeLog: true });
-      if (expedition.context === 'first') result.rewards.scrap = Math.max(3, result.rewards.scrap);
+      if (expedition.context === 'first' && result.success) {
+        var guaranteedOre = Math.max(0, 3 - Number(result.rewards.materials['iron-ore'] || 0));
+        if (guaranteedOre) {
+          result.rewards.materials['iron-ore'] = 3;
+          result.loot.materials['iron-ore'] = 3;
+          result.loot.drops.push({ slot: 'guided', key: 'iron-ore', quantity: guaranteedOre });
+        }
+      }
       result.changes = {};
       expedition.party.forEach(function (key) {
         var outcome = result.heroes[key];
@@ -430,6 +460,20 @@
       var activeActivity = activityKey.indexOf('expedition:') === 0 ? state.activities.expeditions[activityKey.split(':')[1]] : state.activities.craft;
       if (activeActivity) element.textContent = timeText(remaining(activeActivity));
     });
+    document.querySelectorAll('[data-live-meter]').forEach(function (element) {
+      var parts = element.dataset.liveMeter.split(':');
+      var metric = displayedCondition(parts[0])[parts[1]];
+      if (!metric) return;
+      var width = metric.maximum ? Math.max(0, Math.min(100, metric.value / metric.maximum * 100)) : 0;
+      element.setAttribute('aria-label', parts[1].charAt(0).toUpperCase() + parts[1].slice(1) + ': ' + metric.value + ' of ' + metric.maximum);
+      element.setAttribute('aria-valuenow', metric.value);
+      element.setAttribute('aria-valuemax', metric.maximum);
+      var fill = element.querySelector('i');
+      if (fill) fill.style.setProperty('--meter-percent', width + '%');
+      var tooltipValue = element.closest('.tooltip-wrap');
+      tooltipValue = tooltipValue && tooltipValue.querySelector('.tooltip-popover span');
+      if (tooltipValue) tooltipValue.textContent = metric.value + ' / ' + metric.maximum;
+    });
   }
 
   function tooltip(label, description, trigger, modifier, focusable) {
@@ -449,21 +493,33 @@
     return '<div class="meter-row"><span>' + infoTerm(name, STAT_INFO[name.toLowerCase()]) + '</span><span class="meter ' + (kind || '') + '" role="meter" aria-label="' + esc(name) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><i style="width:' + width + '%"></i></span><b>' + esc(display === undefined ? value : display) + '</b></div>';
   }
 
-  function miniMeter(label, value, maximum, kind, symbol) {
+  function miniMeter(label, value, maximum, kind, symbol, heroKey) {
     var max = maximum || 100;
     var width = max ? Math.max(0, Math.min(100, value / max * 100)) : 0;
-    var bar = '<span class="mini-meter ' + kind + '" role="meter" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i style="--meter-percent:' + width + '%"></i></span>';
+    var live = heroKey ? ' data-live-meter="' + heroKey + ':' + label.toLowerCase() + '"' : '';
+    var bar = '<span class="mini-meter ' + kind + '"' + live + ' role="meter" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i style="--meter-percent:' + width + '%"></i></span>';
     return tooltip(label, value + ' / ' + max, bar, 'meter-tooltip', false);
   }
 
+  function displayedCondition(key) {
+    var condition = state.heroes[key];
+    var recovery = allFacilityActivities().find(function (entry) { return entry.activity.hero === key; });
+    if (recovery) condition = facilityProgress(recovery.activity, recovery.facility, Date.now());
+    var stats = E.effectiveStats(key, { xp: condition.xp, readiness: condition.readiness, weaponBonus: equipmentAttack()[key] });
+    return {
+      health: { value: Math.max(1, Math.round(stats.maxHealth * condition.health / 100)), maximum: stats.maxHealth },
+      mana: { value: condition.mana, maximum: stats.maxMana },
+      readiness: { value: condition.readiness, maximum: 100 },
+      experience: { value: xpWithinLevel(condition), maximum: 100 }
+    };
+  }
+
   function conditionMeters(key, compact) {
-    var hero = E.HEROES[key], condition = state.heroes[key];
-    var stats = effectiveHeroStats(key);
-    var healthNow = Math.max(1, Math.round(stats.maxHealth * condition.health / 100));
-    var values = [miniMeter('Health', healthNow, stats.maxHealth, 'health', '♥')];
-    if (stats.maxMana) values.push(miniMeter('Mana', condition.mana, stats.maxMana, 'mana', '◆'));
-    values.push(miniMeter('Readiness', condition.readiness, 100, 'ready', '●'));
-    values.push(miniMeter('Experience', xpWithinLevel(condition), 100, 'xp', '✦'));
+    var valuesByStat = displayedCondition(key);
+    var values = [miniMeter('Health', valuesByStat.health.value, valuesByStat.health.maximum, 'health', '♥', key)];
+    if (valuesByStat.mana.maximum) values.push(miniMeter('Mana', valuesByStat.mana.value, valuesByStat.mana.maximum, 'mana', '◆', key));
+    values.push(miniMeter('Readiness', valuesByStat.readiness.value, 100, 'ready', '●', key));
+    values.push(miniMeter('Experience', valuesByStat.experience.value, 100, 'xp', '✦', key));
     return '<span class="mini-meters">' + values.join('') + '</span>';
   }
 
@@ -529,7 +585,7 @@
   }
 
   function resources() {
-    return '<div class="resources"><span><b>' + state.gold + '</b> Gold</span><span><b>' + state.scrap + '</b> Scrap</span><span><b>' + state.herbs + '</b> Herbs</span>' +
+    return '<div class="resources"><span><b>' + state.gold + '</b> Gold</span>' +
       (installPrompt ? '<button class="install-button" data-action="install">Install</button>' : '') + '</div>';
   }
 
@@ -581,9 +637,11 @@
     var cost = selected ? facilityCost(facilityKey, selected) : facility.cost;
     var duration = selected ? facilityDuration(facilityKey, selected) : null;
     var needed = selected ? facilityNeeded(facilityKey, selected) : false;
-    var unavailable = !selected || Boolean(selectedActivity) || !needed || state.gold < cost;
-    var slotTitle = !selected ? 'Select a hero' : selectedActivity ? 'Selected hero is busy' : !needed ? 'No treatment needed' : 'Assign ' + E.HEROES[selected].name;
-    var slotCopy = selectedActivity ? E.HEROES[selected].name + ' · ' + selectedActivity.title + ' ' + timeText(selectedActivity.remaining) : !needed && selected ? (facilityKey === 'infirmary' ? 'Health is full and no Injury is present.' : 'Health, Mana and Readiness are already full.') : facility.activity + ' · ' + cost + ' gold · about ' + duration + ' sec';
+    var insufficientGold = selected && state.gold < cost;
+    var unavailable = !selected || Boolean(selectedActivity) || !needed || insufficientGold;
+    var slotTitle = !selected ? 'Select a hero' : selectedActivity ? 'Selected hero is busy' : !needed ? 'No treatment needed' : insufficientGold ? 'Not enough gold' : 'Assign ' + E.HEROES[selected].name;
+    var noNeedCopy = selected && state.heroes[selected].injured && facilityKey === 'tavern' ? 'Injured heroes require treatment at the Infirmary.' : facilityKey === 'infirmary' ? 'Health is full and no Injury is present.' : 'Health, Mana and Readiness are already full.';
+    var slotCopy = selectedActivity ? E.HEROES[selected].name + ' · ' + selectedActivity.title + ' ' + timeText(selectedActivity.remaining) : !needed && selected ? noNeedCopy : insufficientGold ? 'Treatment costs ' + cost + ' gold; the company has ' + state.gold + '.' : facility.activity + ' · ' + cost + ' gold · about ' + duration + ' sec';
     return '<article class="facility-slot empty" data-drop-facility="' + facilityKey + '" data-drop-slot="' + index + '" data-tutorial-target="facility-slot-' + index + '"><span class="slot-number">Slot ' + (index + 1) + '</span><div class="empty-slot-mark">+</div><strong>' + slotTitle + '</strong><span' + (selectedActivity ? ' data-busy-hero="' + selected + '"' : '') + '>' + slotCopy + '</span><button class="secondary" data-action="assign-facility" data-facility="' + facilityKey + '" data-slot="' + index + '" ' + (unavailable ? 'disabled' : '') + '>Place selected hero</button></article>';
   }
 
@@ -600,10 +658,9 @@
     else if (state.workshopOutput) body = '<article class="craft-card output-ready"><div class="item-icon">⚔</div><div><span class="label">Craft complete</span><h3>' + state.workshopOutput.name + '</h3><p>' + (inventoryFull() ? 'Company inventory is full. The item will remain safely here until space is available.' : 'A space is available in company inventory.') + '</p>' + storage + '<div class="craft-actions"><button class="primary" data-action="store-workshop-output" ' + (inventoryFull() ? 'disabled' : '') + '>Store in Inventory</button><button class="secondary" data-view="inventory">Manage Inventory</button></div></div></article>';
     else body = '<div class="recipe-grid">' + Object.keys(CRAFT_RECIPES).map(function (key) {
       var recipe = CRAFT_RECIPES[key], duration = state.tutorial === 'forge' && key === 'iron-sword' ? 5 : recipe.duration;
-      var disabled = state.gold < recipe.gold || state.scrap < recipe.scrap || state.herbs < recipe.herbs || (recipe.outputType === 'equipment' && inventoryFull());
+      var disabled = state.gold < recipe.gold || !hasRecipeMaterials(recipe) || (recipe.outputType === 'equipment' && inventoryFull());
       var costs = [recipe.gold + ' gold'];
-      if (recipe.scrap) costs.push(recipe.scrap + ' scrap');
-      if (recipe.herbs) costs.push(recipe.herbs + ' herb');
+      costs = costs.concat(materialCosts(recipe));
       costs.push(duration + ' sec'); costs.push('+' + recipe.xp + ' Craft XP');
       return '<article class="craft-card"><div class="item-icon">' + recipe.icon + '</div><div><span class="label">' + recipe.label + '</span><h3>' + recipe.name + '</h3><p>' + recipe.description + '</p><div class="costs">' + costs.map(function (cost) { return '<span>' + cost + '</span>'; }).join('') + '</div>' + (recipe.outputType === 'equipment' ? storage : '<span class="storage-count">' + state.consumables[key] + ' held in company supplies</span>') + '<button class="primary" data-action="craft" data-recipe="' + key + '"' + (key === 'iron-sword' ? ' data-tutorial-target="forge"' : '') + (disabled ? ' disabled' : '') + '>Craft</button>' + (recipe.outputType === 'equipment' && inventoryFull() ? '<button class="secondary manage-storage" data-view="inventory">Manage Inventory</button>' : '') + '</div></article>';
     }).join('') + '</div>';
@@ -621,6 +678,18 @@
 
   function town() { return state.activeBuilding ? facilityPanel(state.activeBuilding) : townScene(); }
 
+  function rewardPreviewStrip(encounterKey, approachKey, party) {
+    var modifiers = party ? equipmentExpeditionModifiers(party) : {};
+    var preview = E.rewardPreview(encounterKey, approachKey || 'standard', modifiers);
+    var loot = preview.possibleLoot.map(function (entry) {
+      var quantity = entry.quantity[0] === entry.quantity[1] ? entry.quantity[0] : entry.quantity[0] + '–' + entry.quantity[1];
+      return entry.name + ' ' + entry.chance + '% · ' + quantity + ' per roll';
+    });
+    if (preview.emptyChance) loot.push('Nothing ' + preview.emptyChance + '%');
+    var labels = [preview.gold[0] + '–' + preview.gold[1] + ' gold', preview.lootSlots + ' loot roll' + (preview.lootSlots === 1 ? '' : 's')].concat(loot).concat([preview.xp + '+ XP on victory']);
+    return '<div class="reward-strip reward-preview-strip">' + labels.map(function (label) { return '<span>' + esc(label) + '</span>'; }).join('') + '</div>';
+  }
+
   function expeditionList() {
     var cards = Object.keys(E.ENCOUNTERS).map(function (key) {
       var encounter = E.ENCOUNTERS[key], activity = state.activities.expeditions[key], result = state.expeditionResults[key], unlocked = expeditionUnlocked(key);
@@ -630,7 +699,7 @@
       else if (activity) status = '<div class="mission-progress"><div><span>' + esc((E.APPROACHES[activity.approach] || E.APPROACHES.standard).name) + ' approach</span><strong data-countdown-key="expedition:' + key + '">' + timeText(remaining(activity)) + '</strong></div><div class="progress"><i data-progress-key="expedition:' + key + '" style="width:' + activityProgress(activity) + '%"></i></div><span>' + activity.party.map(function (heroKey) { return E.HEROES[heroKey].name.split(' ')[0]; }).join(', ') + (activity.party.length === 1 ? ' is' : ' are') + ' away</span></div>';
       else status = '<button class="primary" data-action="prepare-expedition" data-expedition="' + key + '"' + (key === 'abandoned-road' ? ' data-tutorial-target="mission-prepare"' : '') + '>Prepare company</button>';
       var listedDuration = key === 'abandoned-road' && !state.firstExpeditionComplete ? '5 sec guided opening' : encounter.duration + ' sec standard';
-      return '<section class="mission-card ' + (!unlocked ? 'locked' : '') + '"><div class="mission-banner"><span>' + esc(encounter.region) + '</span><strong>Level ' + encounter.level + '</strong></div><h2>' + esc(encounter.name) + '</h2><p>' + esc(encounter.description) + '</p><div class="tags">' + encounter.tags.map(function (tag) { return '<span>' + esc(tag) + '</span>'; }).join('') + '<span>' + listedDuration + '</span><span>Repeatable</span></div><div class="reward-strip">' + encounter.rewardLabel.map(function (reward) { return '<span>' + esc(reward) + '</span>'; }).join('') + '</div>' + status + '</section>';
+      return '<section class="mission-card ' + (!unlocked ? 'locked' : '') + '"><div class="mission-banner"><span>' + esc(encounter.region) + '</span><strong>Level ' + encounter.level + '</strong></div><h2>' + esc(encounter.name) + '</h2><p>' + esc(encounter.description) + '</p><div class="tags">' + encounter.tags.map(function (tag) { return '<span>' + esc(tag) + '</span>'; }).join('') + '<span>' + listedDuration + '</span><span>Repeatable</span></div>' + rewardPreviewStrip(key, 'standard') + status + '</section>';
     }).join('');
     return heading('Operations', 'Expeditions', 'Each location has one expedition slot. Different locations can run at the same time, but a hero can only undertake one activity.') + '<div class="mission-board">' + cards + '</div>';
   }
@@ -647,14 +716,15 @@
     var supplySlots = state.selectedSupplies.map(function (supplyKey, index) {
       if (!supplyKey) return '<div class="supply-slot empty"><span>Supply slot ' + (index + 1) + '</span><strong>Empty</strong><small>No item will be taken.</small></div>';
       var supply = E.SUPPLIES[supplyKey];
-      return '<div class="supply-slot"><span>Supply slot ' + (index + 1) + '</span><strong>' + supply.icon + ' ' + supply.name + '</strong><small>' + supply.trigger + '</small><button data-action="remove-supply" data-slot="' + index + '" aria-label="Remove ' + supply.name + '">Remove</button></div>';
+      return '<div class="supply-slot"><span>Supply slot ' + (index + 1) + '</span><strong>' + supply.icon + ' ' + supply.name + '</strong><small><b>Trigger:</b> ' + supply.trigger + '</small><small><b>On use:</b> ' + supply.onUse + '</small><button data-action="remove-supply" data-slot="' + index + '" aria-label="Remove ' + supply.name + '">Remove</button></div>';
     }).join('');
     var supplyOptions = Object.keys(E.SUPPLIES).map(function (key) {
       var supply = E.SUPPLIES[key], remainingStock = state.consumables[key] - supplyCount(state.selectedSupplies, key);
-      return '<button class="supply-option" data-action="add-supply" data-supply="' + key + '" ' + (remainingStock <= 0 || state.selectedSupplies.every(Boolean) ? 'disabled' : '') + '><strong>' + supply.icon + ' ' + supply.name + '</strong><span>' + supply.trigger + '</span><small>' + remainingStock + ' available</small></button>';
+      return '<button class="supply-option" data-action="add-supply" data-supply="' + key + '" ' + (remainingStock <= 0 || state.selectedSupplies.every(Boolean) ? 'disabled' : '') + '><strong>' + supply.icon + ' ' + supply.name + '</strong><span><b>Trigger:</b> ' + supply.trigger + '</span><span><b>On use:</b> ' + supply.onUse + '</span><small>' + remainingStock + ' available</small></button>';
     }).join('');
     var tutorialTiming = !state.firstExpeditionComplete && state.selectedExpedition === 'abandoned-road' ? '<p class="tutorial-timing">Guided opening: this expedition is shortened to five seconds. Later runs use their normal duration.</p>' : '';
-    return heading('Expedition preparation', encounter.name, 'The forecast runs 400 seeded simulations using current condition, equipment, approach and packed supplies.') + tutorialTiming + '<section class="approach-picker"><div class="section-heading"><div><span class="label">Approach</span><h2>How should they proceed?</h2></div><span>Assignment-level choice</span></div><div class="approach-grid">' + approaches + '</div></section><section class="supply-picker"><div class="section-heading"><div><span class="label">Expedition supplies</span><h2>Party pouch</h2></div><span>' + packedSupplies().length + '/' + SUPPLY_SLOTS + ' packed</span></div><p>Assigned supplies are reserved on departure, used automatically under the stated condition and returned if unused.</p><div class="supply-layout"><div class="supply-slots">' + supplySlots + '</div><div class="supply-options">' + supplyOptions + '</div></div></section><div class="preparation-grid"><section><div class="section-heading"><h2>Selected company</h2><span>' + state.selectedParty.length + '/3 selected</span></div><div class="party-slot-grid">' + partySlots + '</div><div class="available-roster"><div class="section-heading"><div><span class="label">Company roster</span><h3>Choose adventurers</h3></div><span>' + Object.keys(E.HEROES).length + ' heroes</span></div><div class="roster-choice-grid">' + Object.keys(E.HEROES).map(rosterChoice).join('') + '</div></div></section>' + danger + '</div>';
+    var supplyPicker = '<section class="supply-picker"><div class="section-heading"><div><span class="label">Expedition supplies</span><h2>Party pouch</h2></div><span>' + packedSupplies().length + '/' + SUPPLY_SLOTS + ' packed</span></div><p>Assigned supplies are reserved on departure, used automatically under the stated condition and returned if unused.</p><div class="supply-group"><span class="label">Packed supplies</span><div class="supply-slots">' + supplySlots + '</div></div><div class="supply-group"><span class="label">Available supplies</span><div class="supply-options">' + supplyOptions + '</div></div></section>';
+    return '<div class="preparation-toolbar"><button class="back-link" data-action="cancel-preparation">← All expeditions</button></div>' + heading('Expedition preparation', encounter.name, 'The forecast runs 400 seeded simulations using current condition, equipment, approach and packed supplies.') + '<section class="preparation-rewards"><div class="section-heading"><div><span class="label">Expected rewards</span><h2>' + approach.name + ' approach</h2></div><span>Successful expedition</span></div>' + rewardPreviewStrip(state.selectedExpedition, state.selectedApproach, state.selectedParty) + '</section>' + tutorialTiming + '<section class="approach-picker"><div class="section-heading"><div><span class="label">Approach</span><h2>How should they proceed?</h2></div><span>Assignment-level choice</span></div><div class="approach-grid">' + approaches + '</div></section><div class="preparation-grid"><section class="company-selection"><div class="section-heading"><h2>Selected company</h2><span>' + state.selectedParty.length + '/3 selected</span></div><div class="party-slot-grid">' + partySlots + '</div><div class="available-roster"><div class="section-heading"><div><span class="label">Company roster</span><h3>Choose adventurers</h3></div><span>' + Object.keys(E.HEROES).length + ' heroes</span></div><div class="roster-choice-grid">' + Object.keys(E.HEROES).map(rosterChoice).join('') + '</div></div>' + supplyPicker + '</section>' + danger + '</div>';
   }
 
   function resultMeter(name, before, after, kind, maximum) {
@@ -681,11 +751,13 @@
     var resultAction = state.resultContext === 'admin' ? '<button class="primary" data-action="leave-replay">Return</button>' : '<button class="primary" data-action="claim-rewards" data-expedition="' + encounter.key + '" data-tutorial-target="claim-rewards">Take rewards</button>';
     var supplies = result.supplies || { loaded: [], used: [], returned: [] };
     var supplySummary = supplies.loaded.length ? '<p class="supply-result"><strong>Supplies:</strong> ' + (supplies.used.length ? supplies.used.map(function (key) { return E.SUPPLIES[key].name + ' used'; }).join(', ') : 'none used') + (supplies.returned.length ? ' · ' + supplies.returned.map(function (key) { return E.SUPPLIES[key].name + ' returned'; }).join(', ') : '') + '</p>' : '<p class="supply-result"><strong>Supplies:</strong> none packed</p>';
-    return heading('Expedition complete', result.success ? encounter.name + ' secured' : 'Company withdrawn', verdict) + '<section class="outcome-summary"><div><span class="label">Company outcome · ' + esc((E.APPROACHES[result.approach] || E.APPROACHES.standard).name) + '</span><h2>' + verdict + '</h2><p>' + result.rounds + ' combat rounds</p>' + supplySummary + '</div><aside><h3>Recovered</h3><div class="reward-strip"><span>' + result.rewards.gold + ' gold</span><span>' + result.rewards.scrap + ' scrap</span><span>' + result.rewards.herbs + ' herb</span><span>' + result.rewards.xp + ' base XP</span></div></aside></section><section class="results-panel"><div class="section-heading"><h2>Company condition</h2><span>Before → after</span></div><div class="hero-results">' + party.map(function (key) {
+    var materialRewards = Object.keys(result.rewards.materials || {}).filter(function (key) { return result.rewards.materials[key] > 0; }).map(function (key) { return '<span>' + result.rewards.materials[key] + ' ' + E.MATERIALS[key].name + '</span>'; }).join('');
+    var xpReward = result.rewards.xp ? result.rewards.xp + ' base XP' : 'No XP · company incapacitated';
+    return heading('Expedition complete', result.success ? encounter.name + ' secured' : 'Company withdrawn', verdict) + '<section class="outcome-summary"><div><span class="label">Company outcome · ' + esc((E.APPROACHES[result.approach] || E.APPROACHES.standard).name) + '</span><h2>' + verdict + '</h2><p>' + result.rounds + ' combat rounds</p>' + supplySummary + '</div><aside><h3>Recovered</h3><div class="reward-strip"><span>' + result.rewards.gold + ' gold</span>' + (materialRewards || '<span>No materials recovered</span>') + '<span>' + xpReward + '</span></div></aside></section><section class="results-panel"><div class="section-heading"><h2>Company condition</h2><span>Before → after</span></div><div class="hero-results">' + party.map(function (key) {
       var change = changes[key];
       var afterLevel = change.afterLevel || E.levelFromExperience(change.after.xp || 0);
       var maxMana = E.effectiveStats(key, { level: afterLevel, readiness: 100 }).maxMana;
-      return '<article><div class="result-hero-head"><span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span><div><h3>' + E.HEROES[key].name + '</h3><span>+' + change.xpGain + ' XP</span></div></div>' + levelResult(change) + resultMeter('Health', change.before.health, change.after.health, 'health') + (maxMana ? resultMeter('Mana', change.before.mana, change.after.mana, 'mana', maxMana) : '') + resultMeter('Readiness', change.before.readiness, change.after.readiness, 'ready') + '</article>';
+      return '<article><div class="result-hero-head"><span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span><div><h3>' + E.HEROES[key].name + '</h3><span>' + (change.xpGain ? '+' + change.xpGain + ' XP' : 'No XP') + '</span></div></div>' + levelResult(change) + resultMeter('Health', change.before.health, change.after.health, 'health') + (maxMana ? resultMeter('Mana', change.before.mana, change.after.mana, 'mana', maxMana) : '') + resultMeter('Readiness', change.before.readiness, change.after.readiness, 'ready') + '</article>';
     }).join('') + '</div>' + resultAction + '</section><details class="encounter-log"><summary>Show encounter log <span>' + result.rounds + ' rounds · Seeded</span></summary><ol>' + result.log.map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>';
   }
 
@@ -761,15 +833,16 @@
     var selected = items.find(function (item) { return item.id === state.selectedInventoryItem; }) || items[0];
     var selectedCompatible = selected && (!choosing || itemCompatible(selected, heroKey, slot));
     var dismantleConfirm = selected && state.pendingDismantleId === selected.id;
-    var actions = selected ? (choosing ? '<button class="primary" data-action="equip-item" data-item-id="' + selected.id + '" data-hero="' + heroKey + '" data-tutorial-target="equip-sword" ' + (!selectedCompatible ? 'disabled' : '') + '>Equip ' + E.HEROES[heroKey].name.split(' ')[0] + '</button>' : dismantleConfirm ? '<div class="dismantle-confirm"><p>Dismantle this item for 1 scrap? This cannot be undone.</p><button class="danger-button" data-action="confirm-dismantle" data-item-id="' + selected.id + '">Dismantle item</button><button class="secondary" data-action="cancel-dismantle">Keep item</button></div>' : '<button class="secondary" data-action="request-dismantle" data-item-id="' + selected.id + '">Dismantle for 1 scrap</button>') : '';
+    var actions = selected ? (choosing ? '<button class="primary" data-action="equip-item" data-item-id="' + selected.id + '" data-hero="' + heroKey + '" data-tutorial-target="equip-sword" ' + (!selectedCompatible ? 'disabled' : '') + '>Equip ' + E.HEROES[heroKey].name.split(' ')[0] + '</button>' : dismantleConfirm ? '<div class="dismantle-confirm"><p>Dismantle this item for 1 Iron Ore? This cannot be undone.</p><button class="danger-button" data-action="confirm-dismantle" data-item-id="' + selected.id + '">Dismantle item</button><button class="secondary" data-action="cancel-dismantle">Keep item</button></div>' : '<button class="secondary" data-action="request-dismantle" data-item-id="' + selected.id + '">Dismantle for 1 Iron Ore</button>') : '';
     var detail = selected ? '<aside class="inventory-detail"><span class="item-icon">⚔</span><span class="label">' + selected.rarity + ' equipment</span><h2>' + selected.name + '</h2><dl><div><dt>Slot</dt><dd>' + SLOT_LABELS[selected.slot] + '</dd></div><div><dt>Attack</dt><dd>+' + selected.attack + '</dd></div><div><dt>Usable by</dt><dd>' + itemRoles(selected) + '</dd></div><div><dt>Source</dt><dd>' + selected.source + '</dd></div></dl>' + actions + '</aside>' : (!choosing ? '<aside class="inventory-detail empty-detail"><span class="label">Company stores</span><h2>No equipment stored</h2><p>Forge equipment at the Workshop, then return here to inspect or dismantle it.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></aside>' : '');
     var current = choosing ? equippedItem(heroKey, slot) : null;
     var chooser = choosing ? '<header class="equipment-choice-header"><div><span class="eyebrow">Equipping ' + E.HEROES[heroKey].name + '</span><h1>Choose ' + SLOT_LABELS[slot] + '</h1><p>Showing equipment compatible with this hero and slot.</p></div><button class="secondary" data-action="cancel-equipment-choice">Cancel</button></header>' + (current ? '<div class="current-equipment"><span>Currently equipped</span><strong>' + current.name + '</strong><button class="secondary small-button" data-action="unequip-item" data-hero="' + heroKey + '" data-slot="' + slot + '" ' + (inventoryFull() ? 'disabled' : '') + '>Unequip</button></div>' : '') + (incompatible.length ? '<button class="filter-toggle" data-action="toggle-incompatible">' + (state.showIncompatibleItems ? 'Hide' : 'Show') + ' ' + incompatible.length + ' incompatible item' + (incompatible.length === 1 ? '' : 's') + '</button>' : '') : heading('Company stores', 'Inventory', 'Browse company equipment. To equip an item, begin from a hero’s equipment slot in the Roster.');
     var cells = items.map(function (item) { return itemCard(item, { selectable: true, selected: selected && selected.id === item.id }); }).join('');
     if (!choosing) for (var empty = state.inventory.length; empty < state.inventoryCapacity; empty += 1) cells += '<div class="inventory-empty-slot"><span>Empty</span></div>';
     var emptyCopy = choosing ? '<div class="empty-state"><h3>No compatible equipment</h3><p>There are no ' + SLOT_LABELS[slot].toLowerCase() + ' items that ' + E.HEROES[heroKey].name + ' can use.</p></div>' : '<div class="empty-state"><h3>The stores are empty</h3><p>Visit the Workshop in Town to forge equipment.</p><button class="secondary" data-action="open-building" data-building="workshop">Open Workshop</button></div>';
-    var supplies = !choosing ? '<section class="supply-inventory"><div class="section-heading"><div><span class="label">Consumables</span><h2>Company supplies</h2></div><span>Stacked separately</span></div><div class="supply-stock-grid">' + Object.keys(E.SUPPLIES).map(function (key) { var supply = E.SUPPLIES[key]; return '<article><span class="supply-icon">' + supply.icon + '</span><div><strong>' + supply.name + '</strong><span>' + supply.description + '</span><small>' + state.consumables[key] + ' available</small></div></article>'; }).join('') + '</div><button class="secondary" data-action="open-building" data-building="workshop">Craft supplies at the Workshop</button></section>' : '';
-    return chooser + supplies + '<section class="inventory-panel"><div class="section-heading"><h2>' + (choosing ? 'Compatible equipment' : 'Equipment stores') + '</h2><span class="capacity-count ' + (inventoryFull() ? 'full' : '') + '">' + state.inventory.length + '/' + state.inventoryCapacity + ' occupied</span></div>' + (items.length || !choosing ? '<div class="inventory-layout"><div class="inventory-slot-grid">' + cells + '</div>' + detail + '</div>' : emptyCopy) + '</section>';
+    var materials = !choosing ? '<section class="material-inventory"><div class="section-heading"><div><span class="label">Crafting materials</span><h2>Recovered materials</h2></div><span>Stacked separately</span></div><div class="material-stock-grid">' + Object.keys(E.MATERIALS).map(function (key) { var material = E.MATERIALS[key]; return '<article><span class="supply-icon">' + material.icon + '</span><div><strong>' + material.name + '</strong><span>' + material.description + '</span><small>' + state.materials[key] + ' stored</small></div></article>'; }).join('') + '</div></section>' : '';
+    var supplies = !choosing ? '<section class="supply-inventory"><div class="section-heading"><div><span class="label">Consumables</span><h2>Company supplies</h2></div><span>Stacked separately</span></div><div class="supply-stock-grid">' + Object.keys(E.SUPPLIES).map(function (key) { var supply = E.SUPPLIES[key]; return '<article><span class="supply-icon">' + supply.icon + '</span><div><strong>' + supply.name + '</strong><span><b>Trigger:</b> ' + supply.trigger + '</span><span><b>On use:</b> ' + supply.onUse + '</span><small>' + state.consumables[key] + ' available</small></div></article>'; }).join('') + '</div><button class="secondary" data-action="open-building" data-building="workshop">Craft supplies at the Workshop</button></section>' : '';
+    return chooser + materials + supplies + '<section class="inventory-panel"><div class="section-heading"><h2>' + (choosing ? 'Compatible equipment' : 'Equipment stores') + '</h2><span class="capacity-count ' + (inventoryFull() ? 'full' : '') + '">' + state.inventory.length + '/' + state.inventoryCapacity + ' occupied</span></div>' + (items.length || !choosing ? '<div class="inventory-layout"><div class="inventory-slot-grid">' + cells + '</div>' + detail + '</div>' : emptyCopy) + '</section>';
   }
 
   function mainView() {
@@ -788,7 +861,7 @@
       'expedition-prepare': { title: 'Prepare the company', copy: 'Open the Abandoned Road and choose who will go.' },
       'party-send': { title: 'Review the forecast', copy: 'The current party is viable. Send them when you are ready.' },
       'claim-rewards': { title: 'Take the rewards', copy: 'Collect the outcome, then decide how to use the recovered materials.' },
-      'return-town-workshop': { title: 'Return to Town', copy: 'The Workshop can turn the recovered scrap into equipment.' },
+      'return-town-workshop': { title: 'Return to Town', copy: 'The Workshop can turn the recovered Iron Ore into equipment.' },
       'town-workshop': { title: 'Open the Workshop', copy: 'Select the Workshop building in the Town.' },
       forge: { title: 'Forge an Iron Sword', copy: 'The guided first craft takes five seconds. Ordinary crafts continue while the game is closed.' },
       crafting: { title: 'The forge is working', copy: 'This first craft is shortened to five seconds for the guided opening. Later recipes use their normal time.' },
@@ -808,11 +881,11 @@
     var heroKey = state.selectedHero || 'elara';
     var heroState = state.heroes[heroKey];
     var heroStats = effectiveHeroStats(heroKey);
-    var resourceControls = ['gold', 'scrap', 'herbs'].map(function (resource) {
+    var resourceControls = ['gold'].map(function (resource) {
       return '<div class="admin-resource"><label for="resource-' + resource + '">' + resource.charAt(0).toUpperCase() + resource.slice(1) + '</label><input id="resource-' + resource + '" type="number" min="0" step="1" value="10"><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="add">Add</button><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="set">Set</button></div>';
     }).join('');
     var heroControls = '<p class="admin-note">Editing the selected roster hero: <strong>' + esc(E.HEROES[heroKey].name) + '</strong></p><div class="admin-hero-state"><label>Level<input id="hero-level" type="number" min="1" max="10" step="1" value="' + heroLevel(heroState) + '"></label><label>XP in level<input id="hero-level-xp" type="number" min="0" max="99" step="1" value="' + xpWithinLevel(heroState) + '"></label><label>Health %<input id="hero-health" type="number" min="1" max="100" step="1" value="' + heroState.health + '"></label><label>Mana / ' + heroStats.maxMana + '<input id="hero-mana" type="number" min="0" max="' + heroStats.maxMana + '" step="1" value="' + heroState.mana + '" ' + (!heroStats.maxMana ? 'disabled' : '') + '></label><label>Readiness %<input id="hero-readiness" type="number" min="0" max="100" step="1" value="' + heroState.readiness + '"></label></div><button class="secondary" data-action="set-hero-state">Apply hero state</button>';
-    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>Selected hero</h3>' + heroControls + '<hr><h3>Primary resources</h3><div class="admin-resources">' + resourceControls + '</div><hr><h3>Inventory capacity</h3><div class="admin-capacity"><input id="inventory-capacity" type="number" min="12" max="60" step="1" value="' + state.inventoryCapacity + '" aria-label="Inventory capacity"><button class="secondary" data-action="set-inventory-capacity">Set capacity</button></div><hr><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
+    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>Selected hero</h3>' + heroControls + '<hr><h3>Currency</h3><div class="admin-resources">' + resourceControls + '</div><p class="admin-note">Material and item controls will be added with the wider inventory administration pass.</p><hr><h3>Inventory capacity</h3><div class="admin-capacity"><input id="inventory-capacity" type="number" min="12" max="60" step="1" value="' + state.inventoryCapacity + '" aria-label="Inventory capacity"><button class="secondary" data-action="set-inventory-capacity">Set capacity</button></div><hr><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
   }
 
   function tutorialTarget() {
@@ -853,7 +926,7 @@
     var app = document.getElementById('app');
     if (state.stage === 'intro') { app.innerHTML = intro(); bind(); return; }
     var notice = state.notice ? '<div class="notice">' + esc(state.notice) + '</div>' : '';
-    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.7</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
+    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.7.1</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
     bind(); applyTutorialSpotlight();
   }
 
@@ -943,7 +1016,7 @@
     var result = state.expeditionResults[expeditionKey];
     if (!result) return;
     var rewards = result.rewards, first = expeditionKey === 'abandoned-road' && !state.firstExpeditionComplete;
-    state.gold += rewards.gold; state.scrap += rewards.scrap; state.herbs += rewards.herbs;
+    state.gold += rewards.gold; addMaterials(rewards.materials);
     state.completedExpeditions[expeditionKey] = Number(state.completedExpeditions[expeditionKey] || 0) + 1;
     delete state.expeditionResults[expeditionKey];
     set({ firstExpeditionComplete: state.firstExpeditionComplete || first, expeditionScreen: 'list', view: 'expeditions', tutorial: first && !state.tutorialSkipped ? 'return-town-workshop' : null, notice: 'Rewards added to company stores.' });
@@ -951,7 +1024,7 @@
 
   function assignFacility(hero, facilityKey, index) {
     var facility = FACILITIES[facilityKey];
-    if (!hero || !facility || !facility.working || !facility.slots || heroBusy(hero) || state.activities.facilities[facilityKey][index] || !facilityNeeded(facilityKey, hero)) return;
+    if (!hero || !facility || !facility.working || !facility.slots || heroBusy(hero) || state.activities.facilities[facilityKey][index] || !facilityNeeded(facilityKey, hero) || (state.heroes[hero].injured && facilityKey !== 'infirmary')) return;
     var cost = facilityCost(facilityKey, hero), duration = facilityDuration(facilityKey, hero);
     if (state.gold < cost) return;
     state.gold -= cost;
@@ -1010,8 +1083,9 @@
     }
     if (action === 'craft' && !state.activities.craft && !state.workshopOutput && CRAFT_RECIPES[data.recipe || 'iron-sword']) {
       var recipe = CRAFT_RECIPES[data.recipe || 'iron-sword'];
-      if (state.gold < recipe.gold || state.scrap < recipe.scrap || state.herbs < recipe.herbs || (recipe.outputType === 'equipment' && inventoryFull())) return;
-      state.gold -= recipe.gold; state.scrap -= recipe.scrap; state.herbs -= recipe.herbs;
+      if (state.gold < recipe.gold || !hasRecipeMaterials(recipe) || (recipe.outputType === 'equipment' && inventoryFull())) return;
+      state.gold -= recipe.gold;
+      Object.keys(recipe.materials || {}).forEach(function (key) { state.materials[key] -= recipe.materials[key]; });
       var craftDuration = state.tutorial === 'forge' && recipe.key === 'iron-sword' ? 5 : recipe.duration;
       state.activities.craft = { type: 'craft', title: recipe.name, recipeKey: recipe.key, startedAt: Date.now(), endsAt: Date.now() + craftDuration * 1000, duration: craftDuration };
       set({ tutorial: state.tutorial === 'forge' && recipe.key === 'iron-sword' ? 'crafting' : state.tutorial, notice: null, completedActivity: null });
@@ -1034,8 +1108,8 @@
       var dismantleIndex = state.inventory.findIndex(function (item) { return item.id === data.itemId; });
       if (dismantleIndex >= 0) {
         var dismantled = state.inventory[dismantleIndex];
-        state.inventory.splice(dismantleIndex, 1); state.scrap += 1;
-        set({ selectedInventoryItem: null, pendingDismantleId: null, notice: dismantled.name + ' dismantled. 1 scrap recovered.' });
+        state.inventory.splice(dismantleIndex, 1); state.materials['iron-ore'] += 1;
+        set({ selectedInventoryItem: null, pendingDismantleId: null, notice: dismantled.name + ' dismantled. 1 Iron Ore recovered.' });
       }
     }
     if (action === 'store-workshop-output' && state.workshopOutput && !inventoryFull()) {
@@ -1068,10 +1142,10 @@
         set({ notice: E.HEROES[state.selectedHero].name + ' updated to level ' + level + ' for testing.' });
       } else set({ notice: 'Hero values are outside their permitted ranges.' });
     }
-    if (action === 'change-resource' && data.resource) {
+    if (action === 'change-resource' && data.resource === 'gold') {
       var resourceInput = document.getElementById('resource-' + data.resource);
       var resourceValue = resourceInput ? Math.floor(Number(resourceInput.value)) : NaN;
-      if (['gold', 'scrap', 'herbs'].indexOf(data.resource) >= 0 && Number.isFinite(resourceValue) && resourceValue >= 0) {
+      if (Number.isFinite(resourceValue) && resourceValue >= 0) {
         var resourcePatch = {};
         resourcePatch[data.resource] = data.mode === 'set' ? resourceValue : state[data.resource] + resourceValue;
         resourcePatch.notice = data.resource.charAt(0).toUpperCase() + data.resource.slice(1) + ' adjusted by administrative control.';
@@ -1102,7 +1176,7 @@
   function exportSave() {
     var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob), link = document.createElement('a');
-    link.href = url; link.download = 'adventure-company-save-v7.json'; link.click(); URL.revokeObjectURL(url); set({ notice: 'Save exported.' });
+    link.href = url; link.download = 'adventure-company-save-v8.json'; link.click(); URL.revokeObjectURL(url); set({ notice: 'Save exported.' });
   }
 
   function importSave(event) {
@@ -1121,7 +1195,7 @@
   var context = document.modelContext;
   if (context && context.registerTool) {
     var schema = { type: 'object', properties: {}, additionalProperties: false };
-    Promise.resolve(context.registerTool({ name: 'get_company_state', title: 'Get company state', description: 'Read current Adventure Company progress, activities and resources.', inputSchema: schema, annotations: { readOnlyHint: true, untrustedContentHint: false }, execute: function () { return { view: state.view, seed: state.seed, runNumber: state.runNumber, resources: { gold: state.gold, scrap: state.scrap, herbs: state.herbs }, activities: state.activities }; } })).catch(function () {});
+    Promise.resolve(context.registerTool({ name: 'get_company_state', title: 'Get company state', description: 'Read current Adventure Company progress, activities and resources.', inputSchema: schema, annotations: { readOnlyHint: true, untrustedContentHint: false }, execute: function () { return { view: state.view, seed: state.seed, runNumber: state.runNumber, resources: { gold: state.gold, materials: state.materials }, activities: state.activities }; } })).catch(function () {});
     Promise.resolve(context.registerTool({ name: 'finish_current_prototype_timers', title: 'Finish current timers', description: 'Finish all active prototype timers.', inputSchema: schema, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: function () { allExpeditionActivities().forEach(function (entry) { entry.activity.endsAt = Date.now(); }); if (state.activities.craft) state.activities.craft.endsAt = Date.now(); allFacilityActivities().forEach(function (entry) { entry.activity.endsAt = Date.now(); }); completeActivities(); render(); return { finished: true, view: state.view }; } })).catch(function () {});
   }
 

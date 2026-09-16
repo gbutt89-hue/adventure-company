@@ -84,6 +84,13 @@ assert.match(styles, /\.meter\.health i,\.result-meter\.health \.after/, 'Large 
 assert.doesNotMatch(styles, /\}\.health i,\.result-meter\.health/, 'Unscoped condition colours must not make every rail bar appear full');
 assert.match(styles, /rail-copy>em/,'Rail status styling must not override meter fills');
 
+const recoveringRail = renderState(playing({
+  heroes: { elara: { health: 50, mana: 0, readiness: 40, xp: 25 } },
+  activities: { expeditions: {}, craft: null, facilities: { tavern: [{ hero: 'elara', title: 'Room and board', startedAt: Date.now() - 10000, endsAt: Date.now() + 40000, duration: 50, rates: { health: 1, mana: 2, readiness: 2 }, startState: { health: 50, mana: 0, readiness: 40, xp: 25, injured: false } }, null], infirmary: [null] } }
+}));
+assert.match(recoveringRail, /aria-label="Health: 26 of 44"/, 'The roster rail must show recovery accrued so far');
+assert.match(recoveringRail, /aria-label="Readiness: 60 of 100"/, 'The roster rail must project live Tavern Readiness recovery');
+
 const tavern = renderState(playing({ activeBuilding: 'tavern' }));
 assert.match(tavern, /2 configurable recovery slots|Slot 2/);
 assert.match(tavern, /Place selected hero/);
@@ -106,6 +113,19 @@ assert.match(infirmary, /does not restore Mana or Readiness/);
 assert.match(infirmary, /On completion: 100% Health · Injury treated/);
 assert.match(infirmary, /Leave early/);
 assert.doesNotMatch(infirmary, /On completion:[^<]*Readiness/, 'Infirmary recovery must not include Readiness');
+
+const injuredForInfirmary = renderState(playing({
+  activeBuilding: 'infirmary', selectedHero: 'elara', gold: 20,
+  heroes: { elara: { health: 40, mana: 0, readiness: 25, xp: 0, injured: true } }
+}));
+assert.match(injuredForInfirmary, /Assign Elara Voss/);
+assert.match(injuredForInfirmary, /data-action="assign-facility" data-facility="infirmary" data-slot="0" >Place selected hero/, 'An injured available hero with enough gold must be assignable to the Infirmary');
+const injuredForTavern = renderState(playing({
+  activeBuilding: 'tavern', selectedHero: 'elara', gold: 20,
+  heroes: { elara: { health: 40, mana: 0, readiness: 25, xp: 0, injured: true } }
+}));
+assert.match(injuredForTavern, /Injured heroes require treatment at the Infirmary/);
+assert.match(injuredForTavern, /data-action="assign-facility" data-facility="tavern" data-slot="0" disabled/, 'An injured hero must not use the Tavern instead of treatment');
 
 const roster = renderState(playing({ view: 'roster' }));
 assert.match(roster, />Ward</);
@@ -136,7 +156,7 @@ const levelUpResult = renderState(playing({
   expeditionResults: {
     'abandoned-road': {
       encounterKey: 'abandoned-road', success: true, approach: 'standard', rounds: 2, potionUsed: false,
-      rewards: { gold: 16, scrap: 3, herbs: 0, xp: 20 },
+      rewards: { gold: 16, materials: { 'iron-ore': 3 }, xp: 20 },
       heroes: { elara: { injured: false } }, log: ['The road is clear.'],
       changes: { elara: { before: { health: 100, mana: 0, readiness: 100, xp: 90 }, after: { health: 92, mana: 0, readiness: 80, xp: 110 }, xpGain: 20, beforeLevel: 1, afterLevel: 2, levelsGained: 1, unlockedMoves: ['Guarded Lunge'] } }
     }
@@ -183,6 +203,12 @@ assert.match(preparation, /Favoured/);
 assert.match(preparation, /Party pouch/);
 assert.match(preparation, /Field Tonic/);
 assert.match(preparation, /Mana Draught/);
+assert.match(preparation, /<b>Trigger:<\/b>/);
+assert.match(preparation, /<b>On use:<\/b>/);
+assert.match(preparation, /All expeditions/);
+assert.match(preparation, /Expected rewards/);
+assert.ok(preparation.indexOf('Selected company') < preparation.indexOf('Party pouch'), 'Supplies must sit beneath company selection');
+assert.ok(preparation.indexOf('Packed supplies') < preparation.indexOf('Available supplies'), 'Chosen supplies must be shown before available stock');
 assert.match(preparation, /returned if unused/);
 assert.doesNotMatch(preparation, /favoured-popover/, 'Favoured must use the shared tooltip implementation');
 
@@ -210,14 +236,15 @@ assert.match(inventory, /Usable by/);
 assert.match(inventory, /Forged in the Company Workshop/);
 assert.match(inventory, /1\/12 occupied/);
 assert.equal((inventory.match(/inventory-empty-slot/g) || []).length, 11);
-assert.match(inventory, /Dismantle for 1 scrap/);
+assert.match(inventory, /Dismantle for 1 Iron Ore/);
 assert.doesNotMatch(inventory, /View Elara/);
 assert.doesNotMatch(inventory, /data-action="equip-item"/);
 assert.match(inventory, /Company supplies/);
+assert.match(inventory, /Recovered materials/);
 assert.match(inventory, /2 available/);
 
 const fullItems = Array.from({ length: 12 }, (_, index) => ({ id: 'sword-' + index, key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Test' }));
-const fullWorkshop = renderState(playing({ view: 'town', activeBuilding: 'workshop', gold: 999, scrap: 999, inventory: fullItems }));
+const fullWorkshop = renderState(playing({ view: 'town', activeBuilding: 'workshop', gold: 999, materials: { 'iron-ore': 999, 'common-herb': 999 }, inventory: fullItems }));
 assert.match(fullWorkshop, /12\/12 inventory slots occupied/);
 assert.match(fullWorkshop, /data-action="craft"[^>]*disabled/);
 assert.match(fullWorkshop, /Manage Inventory/);

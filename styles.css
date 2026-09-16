@@ -89,4 +89,29 @@ p{line-height:1.55}
 .favoured-badge{margin-left:auto;color:#287744;font:800 .61rem/1.2 system-ui,sans-serif}.favoured-badge .tooltip-trigger{display:inline-flex;align-items:center;gap:3px}.favoured-badge b{font-size:.9rem}.favoured-badge .tooltip-popover{border-color:#61a873}.roster-choice .favoured-badge{margin:5px 0 0;color:#4b9b64}.roster-choice.selected .favoured-badge{color:#8ed19f}
 @media(max-width:1120px){.approach-grid{grid-template-columns:repeat(2,1fr)}.recipe-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.mission-board,.approach-grid,.supply-layout,.supply-stock-grid{grid-template-columns:1fr}.supply-slots,.supply-options{grid-template-columns:1fr}}
+
+/* 0.7.1 expedition preparation and material stores */
+.danger-panel{position:sticky;top:136px;align-self:start}
+.preparation-toolbar{position:sticky;top:124px;z-index:12;display:flex;margin:-10px 0 16px;padding:6px 0;background:linear-gradient(90deg,var(--paper) 75%,rgba(243,234,215,0))}
+.preparation-toolbar .back-link{padding-left:0;background:transparent;color:#655636;border-bottom:1px solid #887448}
+.preparation-rewards{margin-bottom:18px;padding:16px 18px;background:#26322f;color:#f1e7d2;border-top:4px solid var(--gold)}
+.preparation-rewards .label,.preparation-rewards .section-heading>span{color:var(--gold-2)}
+.preparation-rewards h2{margin-top:4px}
+.preparation-rewards .reward-strip{margin-bottom:0}
+.preparation-rewards .reward-strip span{background:#34413d;color:#eed49a;border-color:#57635f}
+.reward-preview-strip{align-items:center}
+.company-selection>.supply-picker{margin-top:20px}
+.supply-group+.supply-group{margin-top:16px;padding-top:16px;border-top:1px solid #bba987}
+.supply-group>.label{display:block;margin-bottom:8px}
+.supply-slot,.supply-option{min-height:125px}
+.supply-slot small,.supply-option span{display:block}
+.supply-slot small+small,.supply-option span+span{margin-top:5px}
+.material-inventory{margin-bottom:18px;padding:18px;background:#e5d8bf;border:1px solid var(--line)}
+.material-stock-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}
+.material-stock-grid article{display:flex;gap:12px;padding:14px;background:#f6ecd8;border:1px solid #b7a37c}
+.material-stock-grid strong,.material-stock-grid span,.material-stock-grid small{display:block}
+.material-stock-grid span{margin-top:5px;color:#675f51;font:600 .65rem/1.4 system-ui,sans-serif}
+.material-stock-grid small{margin-top:9px;color:#8b6a2f;font:800 .62rem/1 system-ui,sans-serif}
+@media(max-width:800px){.danger-panel{position:static}.preparation-toolbar{top:0}}
+@media(max-width:620px){.material-stock-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{scroll-behaviour:auto!important}.hero-rail,.progress i,.risk i{transition:none}}

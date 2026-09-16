@@ -100,19 +100,26 @@
   };
 
   const APPROACHES = {
-    careful: { name: 'Careful', duration: 1.35, enemyAttack: 0.9, reward: 0.9, materials: 1, readiness: 0.75, description: 'Longer, with lower Readiness use and less avoidable danger.' },
-    standard: { name: 'Standard', duration: 1, enemyAttack: 1, reward: 1, materials: 1, readiness: 1, description: 'Baseline duration, rewards and risk.' },
-    aggressive: { name: 'Aggressive', duration: 0.75, enemyAttack: 1.1, reward: 1.2, materials: 1.15, readiness: 1.25, description: 'Faster and more rewarding, with greater injury and Readiness risk.' },
-    scavenge: { name: 'Scavenge', duration: 1.4, enemyAttack: 1.05, reward: 1, materials: 1.55, readiness: 1.15, description: 'Longer and more exposed, with better material opportunities.' }
+    careful: { name: 'Careful', duration: 1.35, enemyAttack: 0.9, reward: 0.9, lootSlots: 0, lootQuantity: 1, readiness: 0.75, description: 'Longer, with lower Readiness use and less avoidable danger.' },
+    standard: { name: 'Standard', duration: 1, enemyAttack: 1, reward: 1, lootSlots: 0, lootQuantity: 1, readiness: 1, description: 'Baseline duration, rewards and risk.' },
+    aggressive: { name: 'Aggressive', duration: 0.75, enemyAttack: 1.1, reward: 1.2, lootSlots: 0, lootQuantity: 1.25, readiness: 1.25, description: 'Faster, with more gold and larger material finds, but greater injury and Readiness risk.' },
+    scavenge: { name: 'Scavenge', duration: 1.4, enemyAttack: 1.05, reward: 1, lootSlots: 1, lootQuantity: 1, readiness: 1.15, description: 'Longer and more exposed, adding one extra roll on the location loot table.' }
+  };
+
+  const MATERIALS = {
+    'iron-ore': { key: 'iron-ore', name: 'Iron Ore', icon: '⬟', description: 'A common forging material used for dependable metal equipment.' },
+    'common-herb': { key: 'common-herb', name: 'Common Herb', icon: '❧', description: 'A common alchemical ingredient used in basic expedition supplies.' }
   };
 
   const SUPPLIES = {
     'field-tonic': {
       key: 'field-tonic', name: 'Field Tonic', icon: '✚', trigger: 'Lowest-health hero at or below 30% Health',
+      onUse: 'Restore 30% of maximum Health to the most wounded eligible hero.',
       description: 'Automatically restores 30% of maximum Health to the most wounded eligible hero.', type: 'health', threshold: 0.3, restorePercent: 0.3
     },
     'mana-draught': {
       key: 'mana-draught', name: 'Mana Draught', icon: '◆', trigger: 'Caster cannot afford any available spell',
+      onUse: 'Restore 35% of the caster’s maximum Mana.',
       description: 'Automatically restores 35% of maximum Mana when a caster can no longer afford a spell.', type: 'mana', restorePercent: 0.35
     }
   };
@@ -121,8 +128,12 @@
     'abandoned-road': {
       key: 'abandoned-road', name: 'Abandoned Road', region: 'North Road', level: 1, duration: 25,
       description: 'Merchants report bandits and strange lights along the old north road. Clear the obstruction and recover anything useful.',
-      tags: ['Physical threats', 'Bandits'], rewardLabel: ['14–21 gold', '3–4 scrap', 'Possible herb', 'Combat XP'],
-      rewards: { gold: [14, 21], scrap: [3, 4], herbs: [0, 1], herbChance: 0.55, xp: 20 },
+      tags: ['Physical threats', 'Bandits'],
+      rewards: { gold: [14, 21], lootSlots: 2, xp: 20, lootTable: [
+        { key: 'iron-ore', weight: 65, quantity: [1, 2] },
+        { key: 'common-herb', weight: 25, quantity: [1, 1] },
+        { key: null, weight: 10, quantity: [0, 0] }
+      ] },
       opening: ['Fen notices fresh boot prints circling the overturned cart.', 'A snapped axle blocks the road. Two figures rise from the ditch.', 'The company finds the merchants’ cart stripped and abandoned.', 'A warning arrow strikes the earth at Elara’s feet.'],
       victory: ['The surviving bandits flee. The company searches the wreckage.', 'The road falls quiet. A careful search reveals usable supplies.', 'The last threat is driven off and the merchants’ route is secure.'],
       enemies: [
@@ -134,8 +145,12 @@
     'briar-den': {
       key: 'briar-den', name: 'Briar Den', region: 'Greenward', level: 2, duration: 32,
       description: 'Something has driven the briar wolves onto the herb-gatherers’ paths. Thin the pack and search the den.',
-      tags: ['Evasive beasts', 'Herb source'], rewardLabel: ['12–18 gold', '1–2 scrap', '1–3 herbs', 'Combat XP'],
-      rewards: { gold: [12, 18], scrap: [1, 2], herbs: [1, 3], xp: 24 },
+      tags: ['Evasive beasts', 'Herb source'],
+      rewards: { gold: [12, 18], lootSlots: 3, xp: 24, lootTable: [
+        { key: 'common-herb', weight: 65, quantity: [1, 2] },
+        { key: 'iron-ore', weight: 25, quantity: [1, 1] },
+        { key: null, weight: 10, quantity: [0, 0] }
+      ] },
       opening: ['Yellow eyes track the company through the briars.', 'A low growl passes between the thorn-choked trees.', 'The herbalists’ baskets lie scattered beside fresh paw prints.'],
       victory: ['The pack scatters, leaving the herb beds accessible once more.', 'The den falls quiet. Useful herbs grow thick beneath the thorns.'],
       enemies: [
@@ -147,8 +162,12 @@
     'cinder-watch': {
       key: 'cinder-watch', name: 'Cinder Watch', region: 'Old March', level: 3, duration: 40,
       description: 'Embers move inside a ruined watchtower where no fire has burned for years. Investigate the disturbance.',
-      tags: ['Magical threats', 'Fire damage'], rewardLabel: ['18–26 gold', '2–4 scrap', 'Possible herb', 'Combat XP'],
-      rewards: { gold: [18, 26], scrap: [2, 4], herbs: [0, 1], herbChance: 0.35, xp: 30 },
+      tags: ['Magical threats', 'Fire damage'],
+      rewards: { gold: [18, 26], lootSlots: 3, xp: 30, lootTable: [
+        { key: 'iron-ore', weight: 70, quantity: [1, 3] },
+        { key: 'common-herb', weight: 20, quantity: [1, 1] },
+        { key: null, weight: 10, quantity: [0, 0] }
+      ] },
       opening: ['Ash lifts from the floor and gathers into hostile shapes.', 'The old brazier flares as the company enters the watchtower.', 'Heat shimmers around figures formed from soot and ember.'],
       victory: ['The last ember gutters out, leaving strange metal among the ashes.', 'Cool air returns to the tower. The company searches the scorched chamber.'],
       enemies: [
@@ -268,6 +287,56 @@
 
   function chooseEnemyMove(actor, rng) {
     return pick(ENEMY_MOVES[actor.key] || [{ name: 'Basic Attack', power: 1, accuracy: 0, critical: 0, damageType: actor.damageType || 'physical', fire: actor.fire }], rng);
+  }
+
+  function adjustedRange(range, multiplier) {
+    return [
+      Math.max(0, Math.round(range[0] * multiplier)),
+      Math.max(0, Math.round(range[1] * multiplier))
+    ];
+  }
+
+  function rewardPreview(encounterKey, approachKey, rewardModifiers) {
+    const encounter = ENCOUNTERS[encounterKey] || ENCOUNTERS['abandoned-road'];
+    const approach = APPROACHES[approachKey] || APPROACHES.standard;
+    const modifiers = rewardModifiers || {};
+    const materialMultiplier = approach.lootQuantity * (1 + Number(modifiers.materials || 0));
+    const totalWeight = encounter.rewards.lootTable.reduce((sum, entry) => sum + entry.weight, 0);
+    return {
+      gold: adjustedRange(encounter.rewards.gold, approach.reward * (1 + Number(modifiers.gold || 0))),
+      lootSlots: Math.max(0, encounter.rewards.lootSlots + Number(approach.lootSlots || 0)),
+      xp: Math.max(1, Math.round(encounter.rewards.xp * approach.reward)),
+      possibleLoot: encounter.rewards.lootTable.filter(entry => entry.key).map(entry => ({
+        key: entry.key,
+        name: MATERIALS[entry.key].name,
+        chance: Math.round(entry.weight / totalWeight * 100),
+        quantity: adjustedRange(entry.quantity, materialMultiplier)
+      })),
+      emptyChance: Math.round(encounter.rewards.lootTable.filter(entry => !entry.key).reduce((sum, entry) => sum + entry.weight, 0) / totalWeight * 100)
+    };
+  }
+
+  function rollLoot(rewards, approach, rewardModifiers, rng) {
+    const table = rewards.lootTable || [];
+    const totalWeight = table.reduce((sum, entry) => sum + entry.weight, 0);
+    const slotCount = Math.max(0, rewards.lootSlots + Number(approach.lootSlots || 0));
+    const quantityMultiplier = approach.lootQuantity * (1 + Number(rewardModifiers.materials || 0));
+    const materials = {};
+    const drops = [];
+    for (let slot = 0; slot < slotCount; slot += 1) {
+      let roll = rng() * totalWeight;
+      let entry = table[table.length - 1];
+      for (const candidate of table) {
+        roll -= candidate.weight;
+        if (roll < 0) { entry = candidate; break; }
+      }
+      if (!entry || !entry.key) continue;
+      const baseQuantity = entry.quantity[0] + Math.floor(rng() * (entry.quantity[1] - entry.quantity[0] + 1));
+      const quantity = Math.max(1, Math.round(baseQuantity * quantityMultiplier));
+      materials[entry.key] = Number(materials[entry.key] || 0) + quantity;
+      drops.push({ slot: slot + 1, key: entry.key, quantity });
+    }
+    return { slots: slotCount, drops, materials, emptySlots: slotCount - drops.length };
   }
 
   function simulateBattle(options) {
@@ -418,18 +487,19 @@
 
     const rewards = encounter.rewards;
     const rollRange = range => range[0] + Math.floor(rng() * (range[1] - range[0] + 1));
-    const baseHerbs = rewards.herbChance !== undefined ? (rng() < rewards.herbChance ? rewards.herbs[1] : rewards.herbs[0]) : rollRange(rewards.herbs);
+    const loot = success ? rollLoot(rewards, approach, rewardModifiers, rng) : { slots: 0, drops: [], materials: {}, emptySlots: 0 };
+    const allInjured = heroUnits.every(unit => unit.hp <= 0);
     return {
       success, invalid: false, log, heroes: heroResults, rounds: round,
       potionUsed: usedSupplies.indexOf('field-tonic') >= 0,
       supplies: { loaded: loadedSupplies, used: usedSupplies, returned: availableSupplies },
+      loot,
       encounterKey: encounter.key, approach: options.approach || 'standard',
       rewards: success ? {
         gold: Math.max(1, Math.round(rollRange(rewards.gold) * approach.reward * (1 + Number(rewardModifiers.gold || 0)))),
-        scrap: Math.max(0, Math.round(rollRange(rewards.scrap) * approach.materials * (1 + Number(rewardModifiers.materials || 0)))),
-        herbs: Math.max(0, Math.round(baseHerbs * approach.materials * (1 + Number(rewardModifiers.herbs || rewardModifiers.materials || 0)))),
+        materials: loot.materials,
         xp: Math.max(1, Math.round((rewards.xp + round) * approach.reward))
-      } : { gold: 0, scrap: 0, herbs: 0, xp: Math.max(8, Math.round(rewards.xp * 0.35)) }
+      } : { gold: 0, materials: {}, xp: allInjured ? 0 : Math.max(1, Math.round(rewards.xp * 0.25)) }
     };
   }
 
@@ -485,7 +555,7 @@
   }
 
   return {
-    HEROES, TRAITS, ROLES, MOVES, LEVEL_GROWTH, ENEMY_MOVES, ENEMIES, ENCOUNTERS, APPROACHES, SUPPLIES, hashSeed, randomFrom, readinessModifier,
-    effectiveStats, experienceGain, levelFromExperience, movesForRole, simulateBattle, forecast, encounterSeed, heroAdvantages, hasTrait
+    HEROES, TRAITS, ROLES, MOVES, LEVEL_GROWTH, ENEMY_MOVES, ENEMIES, ENCOUNTERS, APPROACHES, MATERIALS, SUPPLIES, hashSeed, randomFrom, readinessModifier,
+    effectiveStats, experienceGain, levelFromExperience, movesForRole, rewardPreview, simulateBattle, forecast, encounterSeed, heroAdvantages, hasTrait
   };
 });

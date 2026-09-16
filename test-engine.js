@@ -10,7 +10,9 @@ assert.ok(first.log.length>4,'Encounter should produce a descriptive log');
 const richer=E.simulateBattle({...options,rewardModifiers:{gold:0.5,materials:0.5}});
 if(first.success){
   assert.ok(richer.rewards.gold>first.rewards.gold,'Equipment reward modifiers must be able to improve expedition loot');
-  assert.ok(richer.rewards.scrap>=first.rewards.scrap,'Material modifiers must not reduce recovered materials');
+  const firstMaterials=Object.values(first.rewards.materials).reduce((sum,value)=>sum+value,0);
+  const richerMaterials=Object.values(richer.rewards.materials).reduce((sum,value)=>sum+value,0);
+  assert.ok(richerMaterials>=firstMaterials,'Material modifiers must not reduce recovered materials');
 }
 assert.equal(E.forecast({party:[],seed:'x'}),null,'An empty party must not receive a forecast');
 
@@ -92,7 +94,10 @@ for(let i=0;i<12;i+=1){
 assert.ok(logs.size>1,'Different seeds should produce variable encounter logs');
 
 assert.deepEqual(Object.keys(E.APPROACHES),['careful','standard','aggressive','scavenge'],'The four agreed expedition approaches must remain available');
+assert.deepEqual(Object.keys(E.MATERIALS),['iron-ore','common-herb'],'Prototype loot must use inventory materials rather than global Scrap and Herbs');
 assert.deepEqual(Object.keys(E.ENCOUNTERS),['abandoned-road','briar-den','cinder-watch'],'The expedition foundation should expose three distinct locations');
+assert.equal(E.rewardPreview('abandoned-road','scavenge').lootSlots,E.rewardPreview('abandoned-road','standard').lootSlots+1,'Scavenge must add one loot-table roll');
+assert.ok(E.rewardPreview('abandoned-road','aggressive').gold[1]>E.rewardPreview('abandoned-road','standard').gold[1],'Aggressive must improve the displayed gold range');
 assert.ok(E.heroAdvantages('elara','abandoned-road').length>0,'Elara’s Armour should favour her on the physical road');
 assert.ok(E.heroAdvantages('fen','briar-den').length>0,'Fen’s Accuracy should favour him against evasive beasts');
 assert.ok(E.heroAdvantages('orin','cinder-watch').length>0,'Orin’s Ward and Fire Resistance should favour him at Cinder Watch');
@@ -126,5 +131,13 @@ assert.ok(roadWithTonic.danger<roadWithoutTonic.danger,'A Field Tonic must mater
 const tutorialSeed=E.encounterSeed('731942',1,['elara','fen','orin'],false);
 const tutorial=E.simulateBattle({party:['elara','fen','orin'],heroStates:fullCondition,swordEquipped:false,seed:tutorialSeed,includeLog:true});
 assert.equal(tutorial.success,true,'The default opening party should complete the tutorial expedition');
-assert.ok(tutorial.rewards.scrap>=3,'A successful opening expedition must fund the first Iron Sword');
+assert.ok(tutorial.loot.slots>=2,'A successful expedition must roll its location loot table');
+
+let totalDefeat=null;
+for(let i=0;i<100&&!totalDefeat;i+=1){
+  const result=E.simulateBattle({party:['elara'],heroStates:{elara:{health:5,mana:0,readiness:0,xp:0}},encounterKey:'cinder-watch',seed:'total-defeat-'+i,includeLog:false});
+  if(!result.success&&result.heroes.elara.injured) totalDefeat=result;
+}
+assert.ok(totalDefeat,'The test setup must produce a fully incapacitated company');
+assert.equal(totalDefeat.rewards.xp,0,'A fully incapacitated company must receive no expedition XP');
 console.log('Adventure Company engine checks passed.');
