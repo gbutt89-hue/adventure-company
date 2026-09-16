@@ -15,7 +15,8 @@ assert.match(styles, /primary-nav\.tutorial-layer/, 'Top navigation must be lift
 assert.match(styles, /\.tooltip-popover\{[^}]*position:fixed[^}]*display:none/, 'Contextual tooltips must use one hidden, viewport-positioned popover');
 assert.match(source, /function bindTooltips/, 'All contextual help must share viewport-aware tooltip positioning');
 assert.doesNotMatch(source, /function helpPanel/, 'Help must be contextual rather than occupying a permanent panel');
-assert.match(source, /craftDuration = state\.tutorial === 'forge' \? 10 : 30/, 'The guided first craft must be shortened to ten seconds');
+assert.match(source, /first \? 5 : encounter\.duration/, 'The guided first expedition must be shortened to five seconds');
+assert.match(source, /state\.tutorial === 'forge' && recipe\.key === 'iron-sword' \? 5 : recipe\.duration/, 'The guided first craft must be shortened to five seconds');
 
 function renderState(savedState, storageKey) {
   const app = { innerHTML: '' };
@@ -86,6 +87,7 @@ assert.match(styles, /rail-copy>em/,'Rail status styling must not override meter
 const tavern = renderState(playing({ activeBuilding: 'tavern' }));
 assert.match(tavern, /2 configurable recovery slots|Slot 2/);
 assert.match(tavern, /Place selected hero/);
+assert.match(tavern, /Health, Mana and Readiness/);
 
 const busyTavern = renderState(playing({
   activeBuilding: 'tavern',
@@ -94,6 +96,16 @@ const busyTavern = renderState(playing({
 }));
 assert.match(busyTavern, /Selected hero is busy/);
 assert.doesNotMatch(busyTavern, /Assign Orin Vale/);
+
+const infirmary = renderState(playing({
+  activeBuilding: 'infirmary', selectedHero: 'elara',
+  heroes: { elara: { health: 40, mana: 0, readiness: 25, xp: 0, injured: true } },
+  activities: { expeditions: {}, craft: null, facilities: { tavern: [null, null], infirmary: [{ hero: 'elara', title: 'Receive treatment', startedAt: Date.now(), endsAt: Date.now() + 30000, duration: 30, rates: { health: 3 }, startState: { health: 40, mana: 0, readiness: 25, xp: 0, injured: true } }] } }
+}));
+assert.match(infirmary, /does not restore Mana or Readiness/);
+assert.match(infirmary, /On completion: 100% Health · Injury treated/);
+assert.match(infirmary, /Leave early/);
+assert.doesNotMatch(infirmary, /On completion:[^<]*Readiness/, 'Infirmary recovery must not include Readiness');
 
 const roster = renderState(playing({ view: 'roster' }));
 assert.match(roster, />Ward</);
@@ -168,6 +180,10 @@ assert.match(preparation, /How should they proceed/);
 assert.match(preparation, />Careful</);
 assert.match(preparation, />Scavenge</);
 assert.match(preparation, /Favoured/);
+assert.match(preparation, /Party pouch/);
+assert.match(preparation, /Field Tonic/);
+assert.match(preparation, /Mana Draught/);
+assert.match(preparation, /returned if unused/);
 assert.doesNotMatch(preparation, /favoured-popover/, 'Favoured must use the shared tooltip implementation');
 
 const expeditionBoard = renderState(playing({ view: 'expeditions', firstExpeditionComplete: true, completedExpeditions: { 'briar-den': 1 } }));
@@ -197,6 +213,8 @@ assert.equal((inventory.match(/inventory-empty-slot/g) || []).length, 11);
 assert.match(inventory, /Dismantle for 1 scrap/);
 assert.doesNotMatch(inventory, /View Elara/);
 assert.doesNotMatch(inventory, /data-action="equip-item"/);
+assert.match(inventory, /Company supplies/);
+assert.match(inventory, /2 available/);
 
 const fullItems = Array.from({ length: 12 }, (_, index) => ({ id: 'sword-' + index, key: 'iron-sword', name: 'Iron Sword', slot: 'mainHand', attack: 4, rarity: 'Common', allowedRoles: ['Vanguard', 'Ranger'], source: 'Test' }));
 const fullWorkshop = renderState(playing({ view: 'town', activeBuilding: 'workshop', gold: 999, scrap: 999, inventory: fullItems }));

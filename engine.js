@@ -106,6 +106,17 @@
     scavenge: { name: 'Scavenge', duration: 1.4, enemyAttack: 1.05, reward: 1, materials: 1.55, readiness: 1.15, description: 'Longer and more exposed, with better material opportunities.' }
   };
 
+  const SUPPLIES = {
+    'field-tonic': {
+      key: 'field-tonic', name: 'Field Tonic', icon: '✚', trigger: 'Lowest-health hero at or below 30% Health',
+      description: 'Automatically restores 30% of maximum Health to the most wounded eligible hero.', type: 'health', threshold: 0.3, restorePercent: 0.3
+    },
+    'mana-draught': {
+      key: 'mana-draught', name: 'Mana Draught', icon: '◆', trigger: 'Caster cannot afford any available spell',
+      description: 'Automatically restores 35% of maximum Mana when a caster can no longer afford a spell.', type: 'mana', restorePercent: 0.35
+    }
+  };
+
   const ENCOUNTERS = {
     'abandoned-road': {
       key: 'abandoned-road', name: 'Abandoned Road', region: 'North Road', level: 1, duration: 25,
@@ -261,15 +272,26 @@
 
   function simulateBattle(options) {
     const party = (options.party || []).filter(key => HEROES[key]);
-    if (!party.length) return { success: false, invalid: true, log: [], heroes: {}, rounds: 0, potionUsed: false };
+    if (!party.length) return { success: false, invalid: true, log: [], heroes: {}, rounds: 0, potionUsed: false, supplies: { loaded: [], used: [], returned: [] } };
     const encounter = ENCOUNTERS[options.encounterKey] || ENCOUNTERS['abandoned-road'];
     const approach = APPROACHES[options.approach] || APPROACHES.standard;
     const rng = randomFrom(options.seed);
     const sword = Boolean(options.swordEquipped);
     const equipmentAttack = options.equipmentAttack || {};
+    const rewardModifiers = options.rewardModifiers || {};
     const heroStates = options.heroStates || {};
     const includeLog = options.includeLog !== false;
     const log = [];
+    const loadedSupplies = (options.supplies || []).filter(key => SUPPLIES[key]);
+    const availableSupplies = loadedSupplies.slice();
+    const usedSupplies = [];
+    const consumeSupply = key => {
+      const index = availableSupplies.indexOf(key);
+      if (index < 0) return false;
+      availableSupplies.splice(index, 1);
+      usedSupplies.push(key);
+      return true;
+    };
     const heroUnits = party.map(key => {
       const condition = heroStates[key] || {};
       const healthPercent = clamp(condition.health === undefined ? 100 : condition.health, 1, 100);
@@ -283,8 +305,8 @@
         startingHealthPercent: Math.round(healthPercent), maxHp: stats.maxHealth,
         attack: stats.attack, armour: stats.armour, ward: stats.ward, speed: stats.speed,
         accuracy: stats.accuracy, evasion: stats.evasion, critical: stats.critical,
-        readinessModifier: stats.readinessModifier, mana: currentMana, startingMana: currentMana,
-        magical: HEROES[key].damageType === 'magical', potion: true
+        readinessModifier: stats.readinessModifier, mana: currentMana, startingMana: currentMana, maxMana: stats.maxMana,
+        magical: HEROES[key].damageType === 'magical'
       };
     });
     const enemyUnits = encounter.enemies.map(enemy => ({ ...enemy, attack: Math.max(1, Math.round(enemy.attack * approach.enemyAttack)), side: 'enemy', hp: enemy.maxHealth }));
@@ -304,9 +326,23 @@
       for (const entry of actors) {
         const actor = entry.unit;
         if (actor.hp <= 0) continue;
+        const tonicTarget = heroUnits.filter(unit => unit.hp > 0 && unit.hp / unit.maxHp <= SUPPLIES['field-tonic'].threshold).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+        if (tonicTarget && consumeSupply('field-tonic')) {
+          const restored = Math.min(tonicTarget.maxHp - tonicTarget.hp, Math.max(1, Math.round(tonicTarget.maxHp * SUPPLIES['field-tonic'].restorePercent)));
+          tonicTarget.hp += restored;
+          write(tonicTarget.name + ' drinks a Field Tonic and recovers ' + restored + ' health.');
+        }
         if (actor.side === 'hero') {
           const targets = enemyUnits.filter(unit => unit.hp > 0);
           if (!targets.length) break;
+          if (actor.maxMana > 0 && actor.mana < actor.maxMana) {
+            const affordableSpell = movesForRole(actor.role, actor.level).some(move => !move.fallback && (move.manaCost || 0) > 0 && (move.manaCost || 0) <= actor.mana);
+            if (!affordableSpell && consumeSupply('mana-draught')) {
+              const restored = Math.min(actor.maxMana - actor.mana, Math.max(1, Math.round(actor.maxMana * SUPPLIES['mana-draught'].restorePercent)));
+              actor.mana += restored;
+              write(actor.name + ' drinks a Mana Draught and recovers ' + restored + ' Mana.');
+            }
+          }
           const move = chooseMove(actor, heroUnits, rng);
           actor.mana -= move.manaCost || 0;
           if (move.healPower) {
@@ -359,12 +395,6 @@
           const damageLabel = move.fire ? ' fire damage' : magical ? ' magical damage' : ' damage';
           write(actor.name + ' uses ' + move.name + '. ' + target.name + ' takes ' + damage + damageLabel + (critical ? ' — a vicious blow.' : '.'));
           if (target.hp === 0) write(target.name + ' is overwhelmed and will return injured.');
-          if (target.hp > 0 && target.hp / target.maxHp <= 0.34 && target.potion) {
-            const restored = Math.min(12, target.maxHp - target.hp);
-            target.hp += restored;
-            target.potion = false;
-            write(target.name + ' drinks a Field Tonic and recovers ' + restored + ' health.');
-          }
         }
       }
     }
@@ -382,7 +412,7 @@
         remainingMana: unit.mana,
         manaSpent: unit.startingMana - unit.mana,
         injured: unit.hp <= 0,
-        potionUsed: !unit.potion
+        potionUsed: false
       };
     });
 
@@ -391,12 +421,13 @@
     const baseHerbs = rewards.herbChance !== undefined ? (rng() < rewards.herbChance ? rewards.herbs[1] : rewards.herbs[0]) : rollRange(rewards.herbs);
     return {
       success, invalid: false, log, heroes: heroResults, rounds: round,
-      potionUsed: heroUnits.some(unit => !unit.potion),
+      potionUsed: usedSupplies.indexOf('field-tonic') >= 0,
+      supplies: { loaded: loadedSupplies, used: usedSupplies, returned: availableSupplies },
       encounterKey: encounter.key, approach: options.approach || 'standard',
       rewards: success ? {
-        gold: Math.max(1, Math.round(rollRange(rewards.gold) * approach.reward)),
-        scrap: Math.max(0, Math.round(rollRange(rewards.scrap) * approach.materials)),
-        herbs: Math.max(0, Math.round(baseHerbs * approach.materials)),
+        gold: Math.max(1, Math.round(rollRange(rewards.gold) * approach.reward * (1 + Number(rewardModifiers.gold || 0)))),
+        scrap: Math.max(0, Math.round(rollRange(rewards.scrap) * approach.materials * (1 + Number(rewardModifiers.materials || 0)))),
+        herbs: Math.max(0, Math.round(baseHerbs * approach.materials * (1 + Number(rewardModifiers.herbs || rewardModifiers.materials || 0)))),
         xp: Math.max(1, Math.round((rewards.xp + round) * approach.reward))
       } : { gold: 0, scrap: 0, herbs: 0, xp: Math.max(8, Math.round(rewards.xp * 0.35)) }
     };
@@ -415,6 +446,8 @@
         party,
         swordEquipped: options.swordEquipped,
         equipmentAttack: options.equipmentAttack,
+        rewardModifiers: options.rewardModifiers,
+        supplies: options.supplies,
         heroStates: options.heroStates,
         encounterKey: options.encounterKey,
         approach: options.approach,
@@ -438,9 +471,9 @@
     };
   }
 
-  function encounterSeed(saveSeed, runNumber, party, swordEquipped, encounterKey, approach) {
+  function encounterSeed(saveSeed, runNumber, party, swordEquipped, encounterKey, approach, supplies) {
     const equipment = typeof swordEquipped === 'string' ? swordEquipped : swordEquipped ? 'iron' : 'training';
-    return [saveSeed, encounterKey || 'abandoned-road', runNumber, party.slice().sort().join(','), equipment, approach || 'standard'].join('|');
+    return [saveSeed, encounterKey || 'abandoned-road', runNumber, party.slice().sort().join(','), equipment, approach || 'standard', (supplies || []).slice().sort().join(',')].join('|');
   }
 
   function heroAdvantages(key, encounterKey) {
@@ -452,7 +485,7 @@
   }
 
   return {
-    HEROES, TRAITS, ROLES, MOVES, LEVEL_GROWTH, ENEMY_MOVES, ENEMIES, ENCOUNTERS, APPROACHES, hashSeed, randomFrom, readinessModifier,
+    HEROES, TRAITS, ROLES, MOVES, LEVEL_GROWTH, ENEMY_MOVES, ENEMIES, ENCOUNTERS, APPROACHES, SUPPLIES, hashSeed, randomFrom, readinessModifier,
     effectiveStats, experienceGain, levelFromExperience, movesForRole, simulateBattle, forecast, encounterSeed, heroAdvantages, hasTrait
   };
 });

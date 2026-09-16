@@ -7,6 +7,11 @@ const first=E.simulateBattle(options);
 const second=E.simulateBattle(options);
 assert.deepEqual(first,second,'Identical inputs must reproduce the same encounter');
 assert.ok(first.log.length>4,'Encounter should produce a descriptive log');
+const richer=E.simulateBattle({...options,rewardModifiers:{gold:0.5,materials:0.5}});
+if(first.success){
+  assert.ok(richer.rewards.gold>first.rewards.gold,'Equipment reward modifiers must be able to improve expedition loot');
+  assert.ok(richer.rewards.scrap>=first.rewards.scrap,'Material modifiers must not reduce recovered materials');
+}
 assert.equal(E.forecast({party:[],seed:'x'}),null,'An empty party must not receive a forecast');
 
 const forecastA=E.forecast({party:['elara'],seed:'forecast',swordEquipped:true,samples:100});
@@ -58,6 +63,9 @@ assert.ok(wornForecast.danger>healthyForecast.danger,'Poor company condition mus
 const emptyMana=E.simulateBattle({party:['orin'],heroStates:{orin:{health:100,mana:0,readiness:100}},seed:'empty-mana',includeLog:true});
 assert.ok(emptyMana.log.some(line=>line.includes('Staff Strike')),'An Acolyte without Mana must use a basic attack');
 assert.equal(emptyMana.heroes.orin.manaSpent,0,'An Acolyte cannot spend Mana they do not have');
+const suppliedMana=E.simulateBattle({party:['orin'],heroStates:{orin:{health:100,mana:0,readiness:100}},supplies:['mana-draught'],seed:'empty-mana',includeLog:true});
+assert.ok(suppliedMana.log.some(line=>line.includes('drinks a Mana Draught')),'A packed Mana Draught must be used under its stated trigger');
+assert.deepEqual(suppliedMana.supplies.used,['mana-draught'],'Used expedition supplies must be reported');
 
 const definedMoveNames=new Set(Object.values(E.MOVES).flat().map(move=>move.name));
 const definedEnemyMoveNames=new Set(Object.values(E.ENEMY_MOVES).flat().map(move=>move.name));
@@ -100,17 +108,20 @@ function statesAtLevel(level){
 const levelOne=statesAtLevel(1),levelTwo=statesAtLevel(2),levelThree=statesAtLevel(3);
 const roadBands={elara:[10,25],fen:[35,60],orin:[10,35],sable:[35,55]};
 Object.entries(roadBands).forEach(([key,band])=>{
-  const danger=E.forecast({party:[key],heroStates:levelOne,encounterKey:'abandoned-road',approach:'standard',seed:'balance',samples:800}).danger;
+  const danger=E.forecast({party:[key],heroStates:levelOne,encounterKey:'abandoned-road',approach:'standard',supplies:['field-tonic'],seed:'balance',samples:800}).danger;
   assert.ok(danger>=band[0]&&danger<=band[1],key+' level-one Road danger '+danger+' must remain within '+band.join('–'));
 });
 Object.keys(E.HEROES).forEach(key=>{
-  const danger=E.forecast({party:[key],heroStates:levelTwo,encounterKey:'abandoned-road',approach:'standard',seed:'balance',samples:800}).danger;
+  const danger=E.forecast({party:[key],heroStates:levelTwo,encounterKey:'abandoned-road',approach:'standard',supplies:['field-tonic'],seed:'balance',samples:800}).danger;
   assert.ok(danger<=20,key+' should visibly outgrow the Road by level two');
 });
-const briarRanger=E.forecast({party:['fen'],heroStates:levelTwo,encounterKey:'briar-den',approach:'standard',seed:'balance',samples:800}).danger;
+const briarRanger=E.forecast({party:['fen'],heroStates:levelTwo,encounterKey:'briar-den',approach:'standard',supplies:['field-tonic'],seed:'balance',samples:800}).danger;
 const cinderAcolyte=E.forecast({party:['orin'],heroStates:levelThree,encounterKey:'cinder-watch',approach:'standard',seed:'balance',samples:800}).danger;
 assert.ok(briarRanger>=20&&briarRanger<=45,'A level-two favoured Ranger should find Briar Den viable but meaningful');
 assert.ok(cinderAcolyte<=15,'A level-three favoured Acolyte should strongly counter Cinder Watch');
+const roadWithoutTonic=E.forecast({party:['elara'],heroStates:levelOne,encounterKey:'abandoned-road',approach:'standard',seed:'balance',samples:800});
+const roadWithTonic=E.forecast({party:['elara'],heroStates:levelOne,encounterKey:'abandoned-road',approach:'standard',supplies:['field-tonic'],seed:'balance',samples:800});
+assert.ok(roadWithTonic.danger<roadWithoutTonic.danger,'A Field Tonic must materially improve the forecast rather than acting as a free hidden item');
 
 const tutorialSeed=E.encounterSeed('731942',1,['elara','fen','orin'],false);
 const tutorial=E.simulateBattle({party:['elara','fen','orin'],heroStates:fullCondition,swordEquipped:false,seed:tutorialSeed,includeLog:true});
