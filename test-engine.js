@@ -25,8 +25,11 @@ assert.ok(E.effectiveStats('fen',{readiness:35}).speed<E.effectiveStats('fen',{r
 assert.equal(E.experienceGain('orin',20),25,'Studious must grant 25% additional expedition XP');
 assert.match(E.TRAITS.Protective,/38%/,'Protective must expose its exact effect');
 assert.ok(Array.isArray(E.HEROES.sable.traits)&&E.HEROES.sable.traits.length===2,'Heroes must support multiple traits');
-assert.equal(E.HEROES.orin.maxMana,45,'Caster Mana must have an explicit maximum');
+assert.equal(E.HEROES.orin.maxMana,50,'Caster Mana must have an explicit maximum');
 assert.equal(E.HEROES.elara.maxMana,0,'Non-casters must not carry a redundant Mana pool');
+assert.ok(E.effectiveStats('elara',{level:2,readiness:100}).maxHealth>E.effectiveStats('elara',{level:1,readiness:100}).maxHealth,'Levelling must increase class-specific maximum Health');
+assert.ok(E.effectiveStats('orin',{level:2,readiness:100}).maxMana>E.effectiveStats('orin',{level:1,readiness:100}).maxMana,'Acolyte levelling must increase maximum Mana');
+assert.ok(E.effectiveStats('fen',{level:2,readiness:100}).attack>E.effectiveStats('fen',{level:1,readiness:100}).attack,'Levelling must materially improve combat statistics');
 assert.deepEqual(Object.keys(E.MOVES),['Vanguard','Ranger','Acolyte','Skirmisher'],'Every current class must own an explicit move progression');
 Object.keys(E.MOVES).forEach(role=>{
   for(let level=1;level<=5;level+=1) assert.ok(E.MOVES[role].some(move=>move.level===level),role+' must gain at least one defined move at level '+level);
@@ -57,6 +60,7 @@ assert.ok(emptyMana.log.some(line=>line.includes('Staff Strike')),'An Acolyte wi
 assert.equal(emptyMana.heroes.orin.manaSpent,0,'An Acolyte cannot spend Mana they do not have');
 
 const definedMoveNames=new Set(Object.values(E.MOVES).flat().map(move=>move.name));
+const definedEnemyMoveNames=new Set(Object.values(E.ENEMY_MOVES).flat().map(move=>move.name));
 for(const key of Object.keys(E.HEROES)){
   const result=E.simulateBattle({party:[key],heroStates:{[key]:{health:100,mana:E.HEROES[key].maxMana,readiness:100,xp:500}},seed:'defined-moves-'+key,includeLog:true});
   result.log.filter(line=>line.startsWith(E.HEROES[key].name+' uses ')).forEach(line=>{
@@ -64,6 +68,12 @@ for(const key of Object.keys(E.HEROES)){
     assert.ok(definedMoveNames.has(moveName),'Every move named in the log must exist in class data: '+moveName);
   });
 }
+const enemyMoveResult=E.simulateBattle({party:['elara'],encounterKey:'abandoned-road',seed:'enemy-move-data',includeLog:true});
+enemyMoveResult.log.filter(line=>/^(Road Cutpurse|Bandit Bruiser) uses /.test(line)).forEach(line=>{
+  const moveName=line.split(' uses ')[1].split(/[.,]/)[0];
+  assert.ok(definedEnemyMoveNames.has(moveName),'Every enemy move named in the log must exist in enemy move data: '+moveName);
+});
+assert.ok(enemyMoveResult.log.some(line=>/^(Road Cutpurse|Bandit Bruiser) uses /.test(line)),'Enemies must use named, data-driven moves');
 
 const logs=new Set();
 for(let i=0;i<12;i+=1){
@@ -81,6 +91,26 @@ assert.ok(E.heroAdvantages('orin','cinder-watch').length>0,'Orin’s Ward and Fi
 const carefulForecast=E.forecast({party:['elara'],encounterKey:'abandoned-road',approach:'careful',seed:'approach-test',samples:400});
 const aggressiveForecast=E.forecast({party:['elara'],encounterKey:'abandoned-road',approach:'aggressive',seed:'approach-test',samples:400});
 assert.ok(carefulForecast.danger<=aggressiveForecast.danger,'Careful must not be more dangerous than Aggressive for identical inputs');
+
+function statesAtLevel(level){
+  const states={};
+  Object.keys(E.HEROES).forEach(key=>{const stats=E.effectiveStats(key,{level,readiness:100});states[key]={health:100,mana:stats.maxMana,readiness:100,xp:(level-1)*100};});
+  return states;
+}
+const levelOne=statesAtLevel(1),levelTwo=statesAtLevel(2),levelThree=statesAtLevel(3);
+const roadBands={elara:[10,25],fen:[35,60],orin:[10,35],sable:[35,55]};
+Object.entries(roadBands).forEach(([key,band])=>{
+  const danger=E.forecast({party:[key],heroStates:levelOne,encounterKey:'abandoned-road',approach:'standard',seed:'balance',samples:800}).danger;
+  assert.ok(danger>=band[0]&&danger<=band[1],key+' level-one Road danger '+danger+' must remain within '+band.join('–'));
+});
+Object.keys(E.HEROES).forEach(key=>{
+  const danger=E.forecast({party:[key],heroStates:levelTwo,encounterKey:'abandoned-road',approach:'standard',seed:'balance',samples:800}).danger;
+  assert.ok(danger<=20,key+' should visibly outgrow the Road by level two');
+});
+const briarRanger=E.forecast({party:['fen'],heroStates:levelTwo,encounterKey:'briar-den',approach:'standard',seed:'balance',samples:800}).danger;
+const cinderAcolyte=E.forecast({party:['orin'],heroStates:levelThree,encounterKey:'cinder-watch',approach:'standard',seed:'balance',samples:800}).danger;
+assert.ok(briarRanger>=20&&briarRanger<=45,'A level-two favoured Ranger should find Briar Den viable but meaningful');
+assert.ok(cinderAcolyte<=15,'A level-three favoured Acolyte should strongly counter Cinder Watch');
 
 const tutorialSeed=E.encounterSeed('731942',1,['elara','fen','orin'],false);
 const tutorial=E.simulateBattle({party:['elara','fen','orin'],heroStates:fullCondition,swordEquipped:false,seed:tutorialSeed,includeLog:true});

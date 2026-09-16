@@ -67,7 +67,7 @@
 
   function fresh() {
     return {
-      saveVersion: 5, stage: 'intro', view: 'town', expeditionScreen: 'list', activeBuilding: null,
+      saveVersion: 6, stage: 'intro', view: 'town', expeditionScreen: 'list', activeBuilding: null,
       companyName: '', gold: 20, scrap: 0, herbs: 0, seed: '731942', runNumber: 0,
       selectedParty: ['elara', 'fen', 'orin'], selectedHero: 'elara', selectedExpedition: 'abandoned-road', selectedApproach: 'standard', firstExpeditionComplete: false,
       tutorial: 'town-expeditions', tutorialSkipped: false, rosterOpen: false, devOpen: false, notice: null,
@@ -80,7 +80,7 @@
       heroes: {
         elara: { health: 100, mana: 0, readiness: 100, xp: 0 },
         fen: { health: 100, mana: 0, readiness: 100, xp: 0 },
-        orin: { health: 100, mana: 45, readiness: 100, xp: 0 },
+        orin: { health: 100, mana: 50, readiness: 100, xp: 0 },
         sable: { health: 100, mana: 0, readiness: 100, xp: 0 }
       }
     };
@@ -113,7 +113,7 @@
   function normalise(value) {
     var base = fresh();
     var next = Object.assign(base, value || {});
-    next.saveVersion = 5;
+    next.saveVersion = 6;
     next.heroes = Object.assign(base.heroes, next.heroes || {});
     next.equipment = Object.assign(base.equipment, next.equipment || {});
     Object.keys(E.HEROES).forEach(function (key) { next.equipment[key] = Object.assign(emptyEquipment(), next.equipment[key] || {}); });
@@ -148,8 +148,9 @@
       next.heroes[key] = Object.assign({}, base.heroes[key], next.heroes[key] || {});
       next.heroes[key].health = Math.max(1, Math.min(100, Number(next.heroes[key].health) || 100));
       next.heroes[key].readiness = Math.max(0, Math.min(100, Number(next.heroes[key].readiness) || 0));
-      next.heroes[key].mana = Math.max(0, Math.min(E.HEROES[key].maxMana, Number(next.heroes[key].mana) || 0));
       next.heroes[key].xp = Math.max(0, Number(next.heroes[key].xp) || 0);
+      var progressed = E.effectiveStats(key, { xp: next.heroes[key].xp, readiness: next.heroes[key].readiness });
+      next.heroes[key].mana = Math.max(0, Math.min(progressed.maxMana, Number(next.heroes[key].mana) || 0));
       Object.keys(next.equipment[key]).forEach(function (slot) {
         if (next.equipment[key][slot]) next.equipment[key][slot] = normaliseItem(next.equipment[key][slot]);
       });
@@ -202,7 +203,7 @@
     return bonuses;
   }
   function equipmentSignature() { var bonuses = equipmentAttack(); return Object.keys(bonuses).sort().map(function (key) { return key + ':' + bonuses[key]; }).join(','); }
-  function effectiveHeroStats(key) { return E.effectiveStats(key, { readiness: state.heroes[key].readiness, weaponBonus: equipmentAttack()[key] }); }
+  function effectiveHeroStats(key) { return E.effectiveStats(key, { xp: state.heroes[key].xp, readiness: state.heroes[key].readiness, weaponBonus: equipmentAttack()[key] }); }
 
   function allFacilityActivities() {
     var list = [];
@@ -257,7 +258,10 @@
         hero.mana = outcome.remainingMana;
         var xpGain = E.experienceGain(key, result.rewards.xp);
         hero.xp += xpGain;
-        result.changes[key] = { before: before, after: { health: hero.health, mana: hero.mana, readiness: hero.readiness, xp: hero.xp }, xpGain: xpGain };
+        var beforeLevel = E.levelFromExperience(before.xp);
+        var afterLevel = E.levelFromExperience(hero.xp);
+        var unlockedMoves = E.movesForRole(E.HEROES[key].role, afterLevel, true).filter(function (move) { return !move.fallback && move.level > beforeLevel && move.level <= afterLevel; }).map(function (move) { return move.name; });
+        result.changes[key] = { before: before, after: { health: hero.health, mana: hero.mana, readiness: hero.readiness, xp: hero.xp }, xpGain: xpGain, beforeLevel: beforeLevel, afterLevel: afterLevel, levelsGained: afterLevel - beforeLevel, unlockedMoves: unlockedMoves };
         state.heroes[key] = hero;
       });
       state.expeditionResults[expeditionKey] = result;
@@ -291,7 +295,7 @@
       var recovered = Object.assign({}, state.heroes[entry.activity.hero]);
       var effects = entry.activity.effects || FACILITIES[entry.facility].effects || {};
       Object.keys(effects).forEach(function (stat) {
-        var maximum = stat === 'mana' ? E.HEROES[entry.activity.hero].maxMana : 100;
+        var maximum = stat === 'mana' ? E.effectiveStats(entry.activity.hero, { xp: recovered.xp, readiness: recovered.readiness }).maxMana : 100;
         recovered[stat] = Math.min(maximum, recovered[stat] + effects[stat]);
       });
       state.heroes[entry.activity.hero] = recovered;
@@ -342,7 +346,7 @@
     return tooltip(label, description, esc(label), 'info-wrap', true);
   }
 
-  function heroLevel(condition) { return Math.floor((condition.xp || 0) / 100) + 1; }
+  function heroLevel(condition) { return E.levelFromExperience(condition.xp || 0); }
   function xpWithinLevel(condition) { return Math.max(0, (condition.xp || 0) % 100); }
 
   function meter(name, value, kind, maximum, display) {
@@ -360,9 +364,10 @@
 
   function conditionMeters(key, compact) {
     var hero = E.HEROES[key], condition = state.heroes[key];
-    var healthNow = Math.max(1, Math.round(hero.maxHealth * condition.health / 100));
-    var values = [miniMeter('Health', healthNow, hero.maxHealth, 'health', '♥')];
-    if (hero.maxMana) values.push(miniMeter('Mana', condition.mana, hero.maxMana, 'mana', '◆'));
+    var stats = effectiveHeroStats(key);
+    var healthNow = Math.max(1, Math.round(stats.maxHealth * condition.health / 100));
+    var values = [miniMeter('Health', healthNow, stats.maxHealth, 'health', '♥')];
+    if (stats.maxMana) values.push(miniMeter('Mana', condition.mana, stats.maxMana, 'mana', '◆'));
     values.push(miniMeter('Readiness', condition.readiness, 100, 'ready', '●'));
     values.push(miniMeter('Experience', xpWithinLevel(condition), 100, 'xp', '✦'));
     return '<span class="mini-meters">' + values.join('') + '</span>';
@@ -539,6 +544,12 @@
     return '<div class="result-stat"><div><span>' + infoTerm(name, STAT_INFO[name.toLowerCase()]) + '</span><strong>' + before + ' → ' + after + ' <em class="' + (delta < 0 ? 'negative' : 'positive') + '">' + (delta > 0 ? '+' : '') + delta + '</em></strong></div><div class="result-meter ' + kind + '"><i class="before" style="width:' + Math.max(0, Math.min(100, before / max * 100)) + '%"></i><i class="after" style="width:' + Math.max(0, Math.min(100, after / max * 100)) + '%"></i><b style="left:' + Math.max(0, Math.min(100, before / max * 100)) + '%"></b></div></div>';
   }
 
+  function levelResult(change) {
+    if (!change.levelsGained) return '';
+    var unlocks = change.unlockedMoves && change.unlockedMoves.length ? '<span>Unlocked ' + change.unlockedMoves.map(esc).join(', ') + '</span>' : '';
+    return '<div class="level-up"><strong>Level up · Level ' + change.afterLevel + '</strong>' + unlocks + '</div>';
+  }
+
   function results() {
     var key = state.selectedExpedition;
     var result = state.resultContext === 'admin' ? state.currentResult : state.expeditionResults[key];
@@ -551,7 +562,9 @@
     var resultAction = state.resultContext === 'admin' ? '<button class="primary" data-action="leave-replay">Return</button>' : '<button class="primary" data-action="claim-rewards" data-expedition="' + encounter.key + '" data-tutorial-target="claim-rewards">Take rewards</button>';
     return heading('Expedition complete', result.success ? encounter.name + ' secured' : 'Company withdrawn', verdict) + '<section class="outcome-summary"><div><span class="label">Company outcome · ' + esc((E.APPROACHES[result.approach] || E.APPROACHES.standard).name) + '</span><h2>' + verdict + '</h2><p>' + result.rounds + ' combat rounds · ' + (result.potionUsed ? 'At least one Field Tonic was consumed.' : 'No Field Tonics were needed.') + '</p></div><aside><h3>Recovered</h3><div class="reward-strip"><span>' + result.rewards.gold + ' gold</span><span>' + result.rewards.scrap + ' scrap</span><span>' + result.rewards.herbs + ' herb</span><span>' + result.rewards.xp + ' base XP</span></div></aside></section><section class="results-panel"><div class="section-heading"><h2>Company condition</h2><span>Before → after</span></div><div class="hero-results">' + party.map(function (key) {
       var change = changes[key];
-      return '<article><div class="result-hero-head"><span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span><div><h3>' + E.HEROES[key].name + '</h3><span>+' + change.xpGain + ' XP</span></div></div>' + resultMeter('Health', change.before.health, change.after.health, 'health') + (E.HEROES[key].maxMana ? resultMeter('Mana', change.before.mana, change.after.mana, 'mana', E.HEROES[key].maxMana) : '') + resultMeter('Readiness', change.before.readiness, change.after.readiness, 'ready') + '</article>';
+      var afterLevel = change.afterLevel || E.levelFromExperience(change.after.xp || 0);
+      var maxMana = E.effectiveStats(key, { level: afterLevel, readiness: 100 }).maxMana;
+      return '<article><div class="result-hero-head"><span class="portrait ' + HERO_UI[key].colour + '">' + HERO_UI[key].initials + '</span><div><h3>' + E.HEROES[key].name + '</h3><span>+' + change.xpGain + ' XP</span></div></div>' + levelResult(change) + resultMeter('Health', change.before.health, change.after.health, 'health') + (maxMana ? resultMeter('Mana', change.before.mana, change.after.mana, 'mana', maxMana) : '') + resultMeter('Readiness', change.before.readiness, change.after.readiness, 'ready') + '</article>';
     }).join('') + '</div>' + resultAction + '</section><details class="encounter-log"><summary>Show encounter log <span>' + result.rounds + ' rounds · Seeded</span></summary><ol>' + result.log.map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>';
   }
 
@@ -585,11 +598,28 @@
     return '<section class="move-progression"><div class="section-heading"><div><span class="label">Combat moves</span><h2>' + esc(hero.role) + ' progression</h2></div><span>Level ' + level + '</span></div><p class="move-intro">The simulator chooses among available moves. Locked moves enter that pool when the hero reaches their listed level.</p><div class="move-grid">' + moves + '</div></section>';
   }
 
+  function sourceLine(source) {
+    if (!source) return '';
+    var parts = [source.base + ' base'];
+    if (source.level) parts.push('+' + source.level + ' level');
+    if (source.equipment) parts.push('+' + source.equipment + ' gear');
+    if (source.readiness) parts.push((source.readiness > 0 ? '+' : '−') + Math.abs(source.readiness) + ' readiness');
+    return parts.join(' · ');
+  }
+
+  function statCell(label, statKey, stats, suffix) {
+    return '<span>' + infoTerm(label, STAT_INFO[statKey]) + '<b>' + stats[statKey] + (suffix || '') + '</b><small class="stat-source">' + sourceLine(stats.sources && stats.sources[statKey]) + '</small></span>';
+  }
+
   function characterSheet(key) {
     var hero = E.HEROES[key], ui = HERO_UI[key], condition = state.heroes[key], stats = effectiveHeroStats(key);
-    var healthNow = Math.max(1, Math.round(hero.maxHealth * condition.health / 100));
+    var healthNow = Math.max(1, Math.round(stats.maxHealth * condition.health / 100));
+    var capacityParts = [];
+    if (stats.sources.maxHealth.level) capacityParts.push('+' + stats.sources.maxHealth.level + ' maximum Health');
+    if (stats.sources.maxMana.level) capacityParts.push('+' + stats.sources.maxMana.level + ' maximum Mana');
+    var capacityGrowth = capacityParts.length ? '<p class="capacity-growth">From levels: ' + capacityParts.join(' · ') + '</p>' : '';
     var traits = hero.traits.map(function (trait) { return '<article><strong>' + infoTerm(trait, E.TRAITS[trait]) + '</strong><p>' + esc(E.TRAITS[trait]) + '</p></article>'; }).join('');
-    return '<section class="character-sheet"><header><span class="portrait large ' + ui.colour + '">' + ui.initials + '</span>' + heroIdentity(key, false) + '<div class="combat-identity"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical damage' : 'Physical damage') + '</span></div></header><div class="character-overview"><section class="sheet-condition"><span class="label">Condition</span>' + meter('Health', healthNow, 'health', hero.maxHealth, healthNow + '/' + hero.maxHealth) + (hero.maxMana ? meter('Mana', condition.mana, 'mana', hero.maxMana, condition.mana + '/' + hero.maxMana) : '') + meter('Readiness', condition.readiness, 'ready') + '<div class="xp-block"><div><span>Level ' + heroLevel(condition) + '</span><strong>' + xpWithinLevel(condition) + '/100 XP</strong></div><span class="meter xp" role="meter" aria-label="Experience towards next level" aria-valuenow="' + xpWithinLevel(condition) + '" aria-valuemin="0" aria-valuemax="100"><i style="width:' + xpWithinLevel(condition) + '%"></i></span></div></section><section class="sheet-stat-groups"><div class="stat-group"><span class="label">Offence</span><div class="full-stats"><span>' + infoTerm('Attack', STAT_INFO.attack) + '<b>' + stats.attack + '</b></span><span>' + infoTerm('Accuracy', STAT_INFO.accuracy) + '<b>' + stats.accuracy + '%</b></span><span>' + infoTerm('Critical', STAT_INFO.critical) + '<b>' + stats.critical + '%</b></span></div></div><div class="stat-group"><span class="label">Defence</span><div class="full-stats"><span>' + infoTerm('Armour', STAT_INFO.armour) + '<b>' + stats.armour + '</b></span><span>' + infoTerm('Ward', STAT_INFO.ward) + '<b>' + stats.ward + '</b></span><span>' + infoTerm('Evasion', STAT_INFO.evasion) + '<b>' + stats.evasion + '%</b></span></div></div><div class="stat-group tempo-group"><span class="label">Tempo</span><div class="full-stats"><span>' + infoTerm('Speed', STAT_INFO.speed) + '<b>' + stats.speed + '</b></span></div></div><div class="resistance-row"><span class="label">Resistances</span><span>' + infoTerm('Fire', STAT_INFO.fire) + '<b>' + hero.resistances.fire + '%</b></span></div></section></div><div class="sheet-lower"><section><span class="label">Equipment</span><div class="equipment-grid">' + Object.keys(SLOT_LABELS).map(function (slot) {
+    return '<section class="character-sheet"><header><span class="portrait large ' + ui.colour + '">' + ui.initials + '</span>' + heroIdentity(key, false) + '<div class="combat-identity"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical damage' : 'Physical damage') + '</span></div></header><div class="character-overview"><section class="sheet-condition"><span class="label">Condition</span>' + meter('Health', healthNow, 'health', stats.maxHealth, healthNow + '/' + stats.maxHealth) + (stats.maxMana ? meter('Mana', condition.mana, 'mana', stats.maxMana, condition.mana + '/' + stats.maxMana) : '') + meter('Readiness', condition.readiness, 'ready') + capacityGrowth + '<div class="xp-block"><div><span>Level ' + heroLevel(condition) + '</span><strong>' + xpWithinLevel(condition) + '/100 XP</strong></div><span class="meter xp" role="meter" aria-label="Experience towards next level" aria-valuenow="' + xpWithinLevel(condition) + '" aria-valuemin="0" aria-valuemax="100"><i style="width:' + xpWithinLevel(condition) + '%"></i></span></div></section><section class="sheet-stat-groups"><div class="stat-group"><span class="label">Offence</span><div class="full-stats">' + statCell('Attack', 'attack', stats) + statCell('Accuracy', 'accuracy', stats, '%') + statCell('Critical', 'critical', stats, '%') + '</div></div><div class="stat-group"><span class="label">Defence</span><div class="full-stats">' + statCell('Armour', 'armour', stats) + statCell('Ward', 'ward', stats) + statCell('Evasion', 'evasion', stats, '%') + '</div></div><div class="stat-group tempo-group"><span class="label">Tempo</span><div class="full-stats">' + statCell('Speed', 'speed', stats) + '</div></div><div class="resistance-row"><span class="label">Resistances</span><span>' + infoTerm('Fire', STAT_INFO.fire) + '<b>' + hero.resistances.fire + '%</b></span></div></section></div><div class="sheet-lower"><section><span class="label">Equipment</span><div class="equipment-grid">' + Object.keys(SLOT_LABELS).map(function (slot) {
       var item = equippedItem(key, slot);
       return '<button class="equipment-slot ' + (item ? 'filled ' : '') + '" data-action="open-equipment-slot" data-slot="' + slot + '" data-hero="' + key + '"' + (slot === 'mainHand' ? ' data-tutorial-target="main-hand-slot"' : '') + '><span>' + SLOT_LABELS[slot] + '</span><strong>' + (item ? item.name : 'Empty') + '</strong>' + (item ? '<em>Attack +' + item.attack + '</em>' : '<em>Choose item</em>') + '</button>';
     }).join('') + '</div></section><section class="trait-list"><span class="label">Traits</span>' + traits + '</section></div>' + moveProgression(key) + '</section>';
@@ -650,10 +680,14 @@
 
   function devPanel() {
     if (!state.devOpen) return '';
+    var heroKey = state.selectedHero || 'elara';
+    var heroState = state.heroes[heroKey];
+    var heroStats = effectiveHeroStats(heroKey);
     var resourceControls = ['gold', 'scrap', 'herbs'].map(function (resource) {
       return '<div class="admin-resource"><label for="resource-' + resource + '">' + resource.charAt(0).toUpperCase() + resource.slice(1) + '</label><input id="resource-' + resource + '" type="number" min="0" step="1" value="10"><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="add">Add</button><button class="secondary" data-action="change-resource" data-resource="' + resource + '" data-mode="set">Set</button></div>';
     }).join('');
-    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>Primary resources</h3><div class="admin-resources">' + resourceControls + '</div><hr><h3>Inventory capacity</h3><div class="admin-capacity"><input id="inventory-capacity" type="number" min="12" max="60" step="1" value="' + state.inventoryCapacity + '" aria-label="Inventory capacity"><button class="secondary" data-action="set-inventory-capacity">Set capacity</button></div><hr><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
+    var heroControls = '<p class="admin-note">Editing the selected roster hero: <strong>' + esc(E.HEROES[heroKey].name) + '</strong></p><div class="admin-hero-state"><label>Level<input id="hero-level" type="number" min="1" max="10" step="1" value="' + heroLevel(heroState) + '"></label><label>XP in level<input id="hero-level-xp" type="number" min="0" max="99" step="1" value="' + xpWithinLevel(heroState) + '"></label><label>Health %<input id="hero-health" type="number" min="1" max="100" step="1" value="' + heroState.health + '"></label><label>Mana / ' + heroStats.maxMana + '<input id="hero-mana" type="number" min="0" max="' + heroStats.maxMana + '" step="1" value="' + heroState.mana + '" ' + (!heroStats.maxMana ? 'disabled' : '') + '></label><label>Readiness %<input id="hero-readiness" type="number" min="0" max="100" step="1" value="' + heroState.readiness + '"></label></div><button class="secondary" data-action="set-hero-state">Apply hero state</button>';
+    return '<aside class="dev-panel"><span class="label">Administrative controls</span><h3>Selected hero</h3>' + heroControls + '<hr><h3>Primary resources</h3><div class="admin-resources">' + resourceControls + '</div><hr><h3>Inventory capacity</h3><div class="admin-capacity"><input id="inventory-capacity" type="number" min="12" max="60" step="1" value="' + state.inventoryCapacity + '" aria-label="Inventory capacity"><button class="secondary" data-action="set-inventory-capacity">Set capacity</button></div><hr><h3>World seed</h3><input id="seed-input" value="' + esc(state.seed) + '" aria-label="World seed"><div class="admin-grid"><button class="secondary" data-action="apply-seed">Apply seed</button><button class="secondary" data-action="random-seed">Randomise</button></div><button class="secondary" data-action="copy-seed">Copy seed</button><button class="secondary" data-action="replay" ' + (!state.lastResult ? 'disabled' : '') + '>Re-run last encounter</button><button class="secondary" data-action="skip-timers">Finish active timers</button><hr><button class="secondary" data-action="export">Export save</button><label class="file-label">Import save<input class="sr-only" id="import-save" type="file" accept="application/json"></label><button class="secondary" data-action="restart">Reset all progress</button></aside>';
   }
 
   function tutorialTarget() {
@@ -693,7 +727,7 @@
     var app = document.getElementById('app');
     if (state.stage === 'intro') { app.innerHTML = intro(); bind(); return; }
     var notice = state.notice ? '<div class="notice">' + esc(state.notice) + '</div>' : '';
-    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.5</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
+    app.innerHTML = '<div class="app-shell' + (state.tutorial ? ' tutorial-active' : '') + '"><header class="topbar"><div class="brand"><span class="brand-mark">A</span><div><strong>' + esc(state.companyName) + '</strong><span>Chartered adventure company · Prototype 0.6</span></div></div>' + activityStrip() + resources() + '<button class="roster-toggle" data-action="toggle-roster">Heroes</button></header>' + navigation() + '<div class="workspace"><main class="content">' + notice + mainView() + '</main>' + heroRail() + '</div><button class="dev-toggle" data-action="dev" aria-label="Administrative controls">⋯</button>' + devPanel() + tutorial() + '</div>';
     bind(); applyTutorialSpotlight();
   }
 
@@ -864,6 +898,24 @@
     }
     if (action === 'skip-tutorial') set({ tutorial: null, tutorialSkipped: true });
     if (action === 'dev') set({ devOpen: !state.devOpen });
+    if (action === 'set-hero-state') {
+      var levelInput = document.getElementById('hero-level');
+      var xpInput = document.getElementById('hero-level-xp');
+      var healthInput = document.getElementById('hero-health');
+      var manaInput = document.getElementById('hero-mana');
+      var readinessInput = document.getElementById('hero-readiness');
+      var level = levelInput ? Math.floor(Number(levelInput.value)) : NaN;
+      var withinLevel = xpInput ? Math.floor(Number(xpInput.value)) : NaN;
+      var health = healthInput ? Math.floor(Number(healthInput.value)) : NaN;
+      var readiness = readinessInput ? Math.floor(Number(readinessInput.value)) : NaN;
+      var totalXp = (level - 1) * 100 + withinLevel;
+      var maxMana = Number.isFinite(totalXp) ? E.effectiveStats(state.selectedHero, { xp: totalXp, readiness: readiness }).maxMana : 0;
+      var mana = maxMana && manaInput ? Math.floor(Number(manaInput.value)) : 0;
+      if (Number.isFinite(level) && level >= 1 && level <= 10 && Number.isFinite(withinLevel) && withinLevel >= 0 && withinLevel <= 99 && Number.isFinite(health) && health >= 1 && health <= 100 && Number.isFinite(readiness) && readiness >= 0 && readiness <= 100 && Number.isFinite(mana) && mana >= 0 && mana <= maxMana) {
+        state.heroes[state.selectedHero] = { health: health, mana: mana, readiness: readiness, xp: totalXp };
+        set({ notice: E.HEROES[state.selectedHero].name + ' updated to level ' + level + ' for testing.' });
+      } else set({ notice: 'Hero values are outside their permitted ranges.' });
+    }
     if (action === 'change-resource' && data.resource) {
       var resourceInput = document.getElementById('resource-' + data.resource);
       var resourceValue = resourceInput ? Math.floor(Number(resourceInput.value)) : NaN;
@@ -898,7 +950,7 @@
   function exportSave() {
     var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob), link = document.createElement('a');
-    link.href = url; link.download = 'adventure-company-save-v5.json'; link.click(); URL.revokeObjectURL(url); set({ notice: 'Save exported.' });
+    link.href = url; link.download = 'adventure-company-save-v6.json'; link.click(); URL.revokeObjectURL(url); set({ notice: 'Save exported.' });
   }
 
   function importSave(event) {

@@ -108,6 +108,40 @@ assert.match(roster, /Measured Strike/);
 assert.match(roster, /Guarded Lunge/);
 assert.doesNotMatch(roster, /title=/, 'Help terms must not trigger duplicate native tooltips');
 
+const levelledRoster = renderState(playing({
+  view: 'roster',
+  selectedHero: 'elara',
+  heroes: { elara: { health: 100, mana: 0, readiness: 100, xp: 100 } }
+}));
+assert.match(levelledRoster, /aria-label="Health" aria-valuenow="48"[^>]*aria-valuemax="48"/, 'Character-sheet Health capacity must scale with level');
+assert.match(levelledRoster, /9 base · \+1 level/, 'Character-sheet statistics must explain their level contribution');
+assert.match(levelledRoster, /From levels: \+4 maximum Health/, 'Level-derived capacity must be visible');
+
+const levelUpResult = renderState(playing({
+  view: 'expeditions',
+  expeditionScreen: 'results',
+  selectedExpedition: 'abandoned-road',
+  expeditionResults: {
+    'abandoned-road': {
+      encounterKey: 'abandoned-road', success: true, approach: 'standard', rounds: 2, potionUsed: false,
+      rewards: { gold: 16, scrap: 3, herbs: 0, xp: 20 },
+      heroes: { elara: { injured: false } }, log: ['The road is clear.'],
+      changes: { elara: { before: { health: 100, mana: 0, readiness: 100, xp: 90 }, after: { health: 92, mana: 0, readiness: 80, xp: 110 }, xpGain: 20, beforeLevel: 1, afterLevel: 2, levelsGained: 1, unlockedMoves: ['Guarded Lunge'] } }
+    }
+  }
+}));
+assert.match(levelUpResult, /Level up · Level 2/);
+assert.match(levelUpResult, /Unlocked Guarded Lunge/);
+
+const adminHero = renderState(playing({
+  view: 'roster', selectedHero: 'orin', devOpen: true,
+  heroes: { orin: { health: 70, mana: 55, readiness: 65, xp: 100 } }
+}));
+assert.match(adminHero, /Editing the selected roster hero: <strong>Orin Vale<\/strong>/);
+assert.match(adminHero, /id="hero-level"[^>]*value="2"/);
+assert.match(adminHero, /Mana \/ 55/);
+assert.match(adminHero, /data-action="set-hero-state"/);
+
 const equipment = renderState(playing({
   view: 'inventory',
   selectedHero: 'sable',

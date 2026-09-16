@@ -7,9 +7,9 @@
 
   const HEROES = {
     elara: { name: 'Elara Voss', role: 'Vanguard', combatStyle: 'Melee', maxHealth: 44, maxMana: 0, attack: 9, armour: 5, ward: 3, speed: 8, accuracy: 84, evasion: 8, critical: 11, resistances: { fire: 20 }, damageType: 'physical', traits: ['Protective'] },
-    fen: { name: 'Fen Alder', role: 'Ranger', combatStyle: 'Ranged', maxHealth: 32, maxMana: 0, attack: 8, armour: 2, ward: 2, speed: 16, accuracy: 91, evasion: 18, critical: 18, resistances: { fire: 10 }, damageType: 'physical', traits: ['Eagle-eyed'] },
-    orin: { name: 'Orin Vale', role: 'Acolyte', combatStyle: 'Caster', maxHealth: 30, maxMana: 45, attack: 7, armour: 1, ward: 6, speed: 11, accuracy: 84, evasion: 10, critical: 11, resistances: { fire: 25 }, damageType: 'magical', traits: ['Studious'] },
-    sable: { name: 'Sable Reed', role: 'Skirmisher', combatStyle: 'Melee', maxHealth: 31, maxMana: 0, attack: 8, armour: 2, ward: 3, speed: 17, accuracy: 89, evasion: 22, critical: 17, resistances: { fire: 10 }, damageType: 'physical', traits: ['Elusive', 'Cinder-born'] }
+    fen: { name: 'Fen Alder', role: 'Ranger', combatStyle: 'Ranged', maxHealth: 36, maxMana: 0, attack: 9, armour: 2, ward: 2, speed: 16, accuracy: 91, evasion: 18, critical: 18, resistances: { fire: 10 }, damageType: 'physical', traits: ['Eagle-eyed'] },
+    orin: { name: 'Orin Vale', role: 'Acolyte', combatStyle: 'Caster', maxHealth: 34, maxMana: 50, attack: 9, armour: 2, ward: 6, speed: 11, accuracy: 86, evasion: 11, critical: 12, resistances: { fire: 25 }, damageType: 'magical', traits: ['Studious'] },
+    sable: { name: 'Sable Reed', role: 'Skirmisher', combatStyle: 'Melee', maxHealth: 35, maxMana: 0, attack: 9, armour: 2, ward: 3, speed: 17, accuracy: 89, evasion: 22, critical: 17, resistances: { fire: 10 }, damageType: 'physical', traits: ['Elusive', 'Cinder-born'] }
   };
 
   const TRAITS = {
@@ -49,7 +49,7 @@
     Acolyte: [
       { key: 'staff-strike', name: 'Staff Strike', level: 1, power: 0.65, accuracy: 4, critical: 0, manaCost: 0, damageType: 'physical', fallback: true, description: 'A modest physical attack used when conserving Mana or unable to cast.' },
       { key: 'guiding-spark', name: 'Guiding Spark', level: 1, power: 0.95, accuracy: 9, critical: 0, manaCost: 7, damageType: 'magical', description: 'A reliable spell costing 7 Mana, with +9 hit chance.' },
-      { key: 'radiant-word', name: 'Radiant Word', level: 1, power: 1.05, accuracy: 1, critical: 2, manaCost: 8, damageType: 'magical', description: 'A balanced spell costing 8 Mana.' },
+      { key: 'radiant-word', name: 'Radiant Word', level: 1, power: 0.75, healPower: 1.1, manaCost: 8, damageType: 'magical', description: 'Damages an enemy and restores Health to the most wounded ally for 8 Mana.' },
       { key: 'searing-sign', name: 'Searing Sign', level: 2, power: 1.15, accuracy: -2, critical: 6, manaCost: 10, damageType: 'magical', description: 'A forceful sign costing 10 Mana, with +6 critical chance.' },
       { key: 'warding-ray', name: 'Warding Ray', level: 3, power: 1.05, accuracy: 10, critical: 0, wardPiercing: 2, manaCost: 9, damageType: 'magical', description: 'A precise ray costing 9 Mana that ignores 2 Ward.' },
       { key: 'sun-lance', name: 'Sun Lance', level: 4, power: 1.3, accuracy: -5, critical: 5, manaCost: 12, damageType: 'magical', description: 'A powerful spell costing 12 Mana, with −5 hit chance.' },
@@ -62,6 +62,40 @@
       { key: 'gapfinder', name: 'Gapfinder', level: 3, power: 1.05, accuracy: 4, critical: 3, armourPiercing: 3, damageType: 'physical', description: 'A precise cut that ignores 3 Armour.' },
       { key: 'reversal', name: 'Reversal', level: 4, power: 1.2, accuracy: -3, critical: 8, damageType: 'physical', description: 'A risky counterattack with +8 critical chance.' },
       { key: 'vanishing-point', name: 'Vanishing Point', level: 5, power: 1.35, accuracy: -5, critical: 12, damageType: 'physical', description: 'A veteran finishing move with +12 critical chance.' }
+    ]
+  };
+
+  const LEVEL_GROWTH = {
+    Vanguard: { maxHealth: 4, maxMana: 0, attack: 1, armour: 0.5, ward: 0.4, speed: 0.3, accuracy: 1, evasion: 0.5, critical: 1 },
+    Ranger: { maxHealth: 3, maxMana: 0, attack: 1, armour: 0.35, ward: 0.35, speed: 1, accuracy: 1, evasion: 1, critical: 1.5 },
+    Acolyte: { maxHealth: 3, maxMana: 5, attack: 1, armour: 0.25, ward: 0.7, speed: 0.6, accuracy: 1, evasion: 0.7, critical: 1 },
+    Skirmisher: { maxHealth: 3, maxMana: 0, attack: 1, armour: 0.3, ward: 0.4, speed: 1, accuracy: 1, evasion: 1.5, critical: 1.5 }
+  };
+
+  const ENEMY_MOVES = {
+    cutpurse: [
+      { name: 'Quick Shiv', power: 0.9, accuracy: 8, critical: 2, armourPiercing: 0, damageType: 'physical' },
+      { name: 'Cheap Shot', power: 1.05, accuracy: -3, critical: 8, armourPiercing: 1, damageType: 'physical' }
+    ],
+    bruiser: [
+      { name: 'Club Swing', power: 1, accuracy: 2, critical: 0, armourPiercing: 1, damageType: 'physical' },
+      { name: 'Crushing Blow', power: 1.15, accuracy: -7, critical: 5, armourPiercing: 1, damageType: 'physical' }
+    ],
+    'briar-wolf': [
+      { name: 'Raking Bite', power: 0.95, accuracy: 7, critical: 2, armourPiercing: 3, damageType: 'physical' },
+      { name: 'Briar Pounce', power: 1.1, accuracy: -4, critical: 7, armourPiercing: 4, damageType: 'physical' }
+    ],
+    'thorn-alpha': [
+      { name: 'Thorn Rend', power: 1.05, accuracy: 3, critical: 3, armourPiercing: 4, damageType: 'physical' },
+      { name: 'Packbreaker Lunge', power: 1.15, accuracy: -5, critical: 8, armourPiercing: 5, damageType: 'physical' }
+    ],
+    'ash-wisp': [
+      { name: 'Ember Dart', power: 0.9, accuracy: 9, critical: 2, wardPiercing: 1, damageType: 'magical', fire: true },
+      { name: 'Searing Touch', power: 1.1, accuracy: -3, critical: 6, wardPiercing: 1, damageType: 'magical', fire: true }
+    ],
+    'cinder-guard': [
+      { name: 'Cinder Blade', power: 1, accuracy: 3, critical: 2, wardPiercing: 2, damageType: 'magical', fire: true },
+      { name: 'Ashen Crush', power: 1.2, accuracy: -7, critical: 7, wardPiercing: 3, damageType: 'magical', fire: true }
     ]
   };
 
@@ -158,17 +192,41 @@
     const hero = HEROES[key];
     if (!hero) return null;
     const settings = options || {};
+    const level = Math.max(1, Number(settings.level) || levelFromExperience(settings.xp));
+    const growth = LEVEL_GROWTH[hero.role] || {};
+    const levelBonus = {};
+    ['maxHealth', 'maxMana', 'attack', 'armour', 'ward', 'speed', 'accuracy', 'evasion', 'critical'].forEach(stat => {
+      levelBonus[stat] = Math.floor((level - 1) * Number(growth[stat] || 0));
+    });
     const modifier = readinessModifier(settings.readiness);
     const weaponBonus = settings.weaponBonus === undefined ? (key === 'elara' && settings.swordEquipped ? 4 : 0) : Number(settings.weaponBonus) || 0;
+    const rawAttack = hero.attack + levelBonus.attack + weaponBonus;
+    const rawSpeed = hero.speed + levelBonus.speed;
+    const attack = Math.max(1, Math.round(rawAttack * modifier));
+    const speed = Math.max(1, Math.round(rawSpeed * modifier));
     return {
-      attack: Math.max(1, Math.round((hero.attack + weaponBonus) * modifier)),
-      armour: hero.armour,
-      ward: hero.ward,
-      speed: Math.max(1, Math.round(hero.speed * modifier)),
-      accuracy: hero.accuracy,
-      evasion: hero.evasion,
-      critical: hero.critical,
-      readinessModifier: modifier
+      level,
+      maxHealth: hero.maxHealth + levelBonus.maxHealth,
+      maxMana: hero.maxMana + levelBonus.maxMana,
+      attack,
+      armour: hero.armour + levelBonus.armour,
+      ward: hero.ward + levelBonus.ward,
+      speed,
+      accuracy: hero.accuracy + levelBonus.accuracy,
+      evasion: hero.evasion + levelBonus.evasion,
+      critical: hero.critical + levelBonus.critical,
+      readinessModifier: modifier,
+      sources: {
+        attack: { base: hero.attack, level: levelBonus.attack, equipment: weaponBonus, readiness: attack - rawAttack },
+        armour: { base: hero.armour, level: levelBonus.armour, equipment: 0, readiness: 0 },
+        ward: { base: hero.ward, level: levelBonus.ward, equipment: 0, readiness: 0 },
+        speed: { base: hero.speed, level: levelBonus.speed, equipment: 0, readiness: speed - rawSpeed },
+        accuracy: { base: hero.accuracy, level: levelBonus.accuracy, equipment: 0, readiness: 0 },
+        evasion: { base: hero.evasion, level: levelBonus.evasion, equipment: 0, readiness: 0 },
+        critical: { base: hero.critical, level: levelBonus.critical, equipment: 0, readiness: 0 },
+        maxHealth: { base: hero.maxHealth, level: levelBonus.maxHealth, equipment: 0, readiness: 0 },
+        maxMana: { base: hero.maxMana, level: levelBonus.maxMana, equipment: 0, readiness: 0 }
+      }
     };
   }
 
@@ -186,11 +244,19 @@
     return includeLocked ? moves.slice() : moves.filter(move => move.level <= currentLevel);
   }
 
-  function chooseMove(actor, rng) {
+  function chooseMove(actor, allies, rng) {
     const unlocked = movesForRole(actor.role, actor.level).filter(move => !move.fallback && (move.manaCost || 0) <= actor.mana);
-    if (unlocked.length) return pick(unlocked, rng);
+    const wounded = allies.filter(unit => unit.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+    const healing = unlocked.filter(move => move.healPower);
+    if (healing.length && wounded && wounded.hp / wounded.maxHp <= 0.65) return pick(healing, rng);
+    const attacks = unlocked.filter(move => !move.healPower);
+    if (attacks.length) return pick(attacks, rng);
     const fallback = movesForRole(actor.role, actor.level).find(move => move.fallback);
     return fallback || { name: 'Basic Attack', power: 1, accuracy: 0, critical: 0, manaCost: 0, damageType: actor.magical ? 'magical' : 'physical' };
+  }
+
+  function chooseEnemyMove(actor, rng) {
+    return pick(ENEMY_MOVES[actor.key] || [{ name: 'Basic Attack', power: 1, accuracy: 0, critical: 0, damageType: actor.damageType || 'physical', fire: actor.fire }], rng);
   }
 
   function simulateBattle(options) {
@@ -207,17 +273,17 @@
     const heroUnits = party.map(key => {
       const condition = heroStates[key] || {};
       const healthPercent = clamp(condition.health === undefined ? 100 : condition.health, 1, 100);
-      const mana = clamp(condition.mana === undefined ? HEROES[key].maxMana : condition.mana, 0, HEROES[key].maxMana);
       const readiness = clamp(condition.readiness === undefined ? 100 : condition.readiness, 0, 100);
       const level = levelFromExperience(condition.xp);
-      const stats = effectiveStats(key, { readiness, swordEquipped: sword, weaponBonus: equipmentAttack[key] });
-      const hp = Math.max(1, Math.round(HEROES[key].maxHealth * healthPercent / 100));
+      const stats = effectiveStats(key, { level, readiness, swordEquipped: sword, weaponBonus: equipmentAttack[key] });
+      const currentMana = clamp(condition.mana === undefined ? stats.maxMana : condition.mana, 0, stats.maxMana);
+      const hp = Math.max(1, Math.round(stats.maxHealth * healthPercent / 100));
       return {
         key, side: 'hero', name: HEROES[key].name, role: HEROES[key].role, level, hp, startingHp: hp,
-        startingHealthPercent: Math.round(healthPercent), maxHp: HEROES[key].maxHealth,
+        startingHealthPercent: Math.round(healthPercent), maxHp: stats.maxHealth,
         attack: stats.attack, armour: stats.armour, ward: stats.ward, speed: stats.speed,
         accuracy: stats.accuracy, evasion: stats.evasion, critical: stats.critical,
-        readinessModifier: stats.readinessModifier, mana, startingMana: mana,
+        readinessModifier: stats.readinessModifier, mana: currentMana, startingMana: currentMana,
         magical: HEROES[key].damageType === 'magical', potion: true
       };
     });
@@ -241,9 +307,16 @@
         if (actor.side === 'hero') {
           const targets = enemyUnits.filter(unit => unit.hp > 0);
           if (!targets.length) break;
-          const target = pick(targets, rng);
-          const move = chooseMove(actor, rng);
+          const move = chooseMove(actor, heroUnits, rng);
           actor.mana -= move.manaCost || 0;
+          if (move.healPower) {
+            const target = heroUnits.filter(unit => unit.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+            const restored = Math.min(target.maxHp - target.hp, Math.max(1, Math.round(actor.attack * move.healPower) + 2));
+            target.hp += restored;
+            write(target.name + ' recovers ' + restored + ' health from ' + move.name + '.');
+            if (!move.power) continue;
+          }
+          const target = pick(targets, rng);
           const hitChance = clamp((actor.accuracy + (move.accuracy || 0) - (target.evasion || 0)) / 100, 0.35, 0.97);
           if (rng() > hitChance) {
             write(actor.name + ' uses ' + move.name + ', but misses ' + target.name + '.');
@@ -269,19 +342,22 @@
             write('Elara intercepts a strike meant for ' + target.name + '.');
             target = elara;
           }
-          const hitChance = clamp(((actor.accuracy || 88) - (target.evasion || 0)) / 100, 0.35, 0.97);
+          const move = chooseEnemyMove(actor, rng);
+          const hitChance = clamp(((actor.accuracy || 88) + (move.accuracy || 0) - (target.evasion || 0)) / 100, 0.35, 0.97);
           if (rng() > hitChance) {
-            write(actor.name + ' swings at ' + target.name + ' and misses.');
+            write(actor.name + ' uses ' + move.name + ', but misses ' + target.name + '.');
             continue;
           }
-          const critical = rng() < 0.1;
-          const base = actor.attack + Math.floor(rng() * 4) + (critical ? 4 : 0);
-          const mitigation = actor.damageType === 'magical' ? target.ward : Math.max(0, target.armour - (actor.armourPiercing || 0));
+          const critical = rng() < clamp((10 + (move.critical || 0)) / 100, 0, 0.75);
+          const poweredAttack = Math.max(1, Math.round(actor.attack * (move.power || 1)));
+          const base = poweredAttack + Math.floor(rng() * 4) + (critical ? Math.ceil(poweredAttack * 0.55) : 0);
+          const magical = move.damageType === 'magical';
+          const mitigation = magical ? Math.max(0, target.ward - (move.wardPiercing || 0)) : Math.max(0, target.armour - (move.armourPiercing || actor.armourPiercing || 0));
           let damage = Math.max(1, base - mitigation);
-          if (actor.fire) damage = Math.max(1, Math.round(damage * (1 - (HEROES[target.key].resistances.fire || 0) / 100)));
+          if (move.fire) damage = Math.max(1, Math.round(damage * (1 - (HEROES[target.key].resistances.fire || 0) / 100)));
           target.hp = Math.max(0, target.hp - damage);
-          const damageLabel = actor.fire ? ' fire damage' : actor.damageType === 'magical' ? ' magical damage' : ' damage';
-          write(actor.name + ' hits ' + target.name + ' for ' + damage + damageLabel + (critical ? ' — a vicious blow.' : '.'));
+          const damageLabel = move.fire ? ' fire damage' : magical ? ' magical damage' : ' damage';
+          write(actor.name + ' uses ' + move.name + '. ' + target.name + ' takes ' + damage + damageLabel + (critical ? ' — a vicious blow.' : '.'));
           if (target.hp === 0) write(target.name + ' is overwhelmed and will return injured.');
           if (target.hp > 0 && target.hp / target.maxHp <= 0.34 && target.potion) {
             const restored = Math.min(12, target.maxHp - target.hp);
@@ -376,7 +452,7 @@
   }
 
   return {
-    HEROES, TRAITS, ROLES, MOVES, ENEMIES, ENCOUNTERS, APPROACHES, hashSeed, randomFrom, readinessModifier,
+    HEROES, TRAITS, ROLES, MOVES, LEVEL_GROWTH, ENEMY_MOVES, ENEMIES, ENCOUNTERS, APPROACHES, hashSeed, randomFrom, readinessModifier,
     effectiveStats, experienceGain, levelFromExperience, movesForRole, simulateBattle, forecast, encounterSeed, heroAdvantages, hasTrait
   };
 });

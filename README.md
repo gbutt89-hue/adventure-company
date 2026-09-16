@@ -2,7 +2,7 @@
 
 A mobile-first, installable browser prototype for a fantasy expedition company management game.
 
-## Prototype 0.5
+## Prototype 0.6
 
 The current slice covers:
 
@@ -36,6 +36,11 @@ The current slice covers:
 - live Health, Mana, Readiness and XP meters in the hero rail
 - data-driven class moves with level-one choices and new unlocks through level five
 - character-sheet move progression with real Mana, accuracy, critical and defence-piercing effects
+- class-specific attribute growth at every hero level, reflected across combat and the interface
+- data-driven enemy moves with named attacks and encounter-specific mechanics
+- level-up outcome cards with newly unlocked moves
+- transparent base, level, equipment and Readiness contributions on the character sheet
+- administrative hero level and condition controls for rapid balance testing
 
 The game is deliberately data-led and low-animation. The current goal is to validate the Town, expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.
 
@@ -56,6 +61,7 @@ Open the local address shown by `serve`. A web server is required for service-wo
 Open the circular `…` button in the lower-right corner to:
 
 - view, copy or replace the world seed
+- set the selected hero's level, experience and current condition
 - reproduce the last encounter
 - complete active prototype timers
 - export or import the local save
