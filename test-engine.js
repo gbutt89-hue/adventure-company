@@ -27,6 +27,16 @@ assert.match(E.TRAITS.Protective,/38%/,'Protective must expose its exact effect'
 assert.ok(Array.isArray(E.HEROES.sable.traits)&&E.HEROES.sable.traits.length===2,'Heroes must support multiple traits');
 assert.equal(E.HEROES.orin.maxMana,45,'Caster Mana must have an explicit maximum');
 assert.equal(E.HEROES.elara.maxMana,0,'Non-casters must not carry a redundant Mana pool');
+assert.deepEqual(Object.keys(E.MOVES),['Vanguard','Ranger','Acolyte','Skirmisher'],'Every current class must own an explicit move progression');
+Object.keys(E.MOVES).forEach(role=>{
+  for(let level=1;level<=5;level+=1) assert.ok(E.MOVES[role].some(move=>move.level===level),role+' must gain at least one defined move at level '+level);
+  E.MOVES[role].forEach(move=>{
+    assert.equal(typeof move.power,'number',move.name+' must define a damage multiplier');
+    assert.ok(move.description,move.name+' must explain its mechanical effect');
+  });
+});
+assert.ok(!E.movesForRole('Skirmisher',1).some(move=>move.name==='Passing Cut'),'Level-two moves must remain locked at level one');
+assert.ok(E.movesForRole('Skirmisher',2).some(move=>move.name==='Passing Cut'),'A move must enter the combat pool at its stated level');
 
 const fullCondition={
   elara:{health:100,mana:30,readiness:100},
@@ -45,6 +55,15 @@ assert.ok(wornForecast.danger>healthyForecast.danger,'Poor company condition mus
 const emptyMana=E.simulateBattle({party:['orin'],heroStates:{orin:{health:100,mana:0,readiness:100}},seed:'empty-mana',includeLog:true});
 assert.ok(emptyMana.log.some(line=>line.includes('Staff Strike')),'An Acolyte without Mana must use a basic attack');
 assert.equal(emptyMana.heroes.orin.manaSpent,0,'An Acolyte cannot spend Mana they do not have');
+
+const definedMoveNames=new Set(Object.values(E.MOVES).flat().map(move=>move.name));
+for(const key of Object.keys(E.HEROES)){
+  const result=E.simulateBattle({party:[key],heroStates:{[key]:{health:100,mana:E.HEROES[key].maxMana,readiness:100,xp:500}},seed:'defined-moves-'+key,includeLog:true});
+  result.log.filter(line=>line.startsWith(E.HEROES[key].name+' uses ')).forEach(line=>{
+    const moveName=line.slice((E.HEROES[key].name+' uses ').length).split(/[.,]/)[0];
+    assert.ok(definedMoveNames.has(moveName),'Every move named in the log must exist in class data: '+moveName);
+  });
+}
 
 const logs=new Set();
 for(let i=0;i<12;i+=1){

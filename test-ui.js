@@ -12,7 +12,8 @@ assert.match(source, /active\.scrollIntoView/, 'Tutorial targets must be moved c
 assert.match(source, /tutorial-active/, 'Tutorial pages must reserve enough room to reveal highlighted controls');
 assert.match(source, /function tutorialAllows/, 'The tutorial must gate interactions to its current target');
 assert.match(styles, /primary-nav\.tutorial-layer/, 'Top navigation must be lifted above the tutorial shade');
-assert.match(styles, /info-wrap>\.info-popover[^}]*display:none/, 'Nested identity styles must not force contextual tooltips open');
+assert.match(styles, /\.tooltip-popover\{[^}]*position:fixed[^}]*display:none/, 'Contextual tooltips must use one hidden, viewport-positioned popover');
+assert.match(source, /function bindTooltips/, 'All contextual help must share viewport-aware tooltip positioning');
 assert.doesNotMatch(source, /function helpPanel/, 'Help must be contextual rather than occupying a permanent panel');
 assert.match(source, /craftDuration = state\.tutorial === 'forge' \? 10 : 30/, 'The guided first craft must be shortened to ten seconds');
 
@@ -74,6 +75,9 @@ const wornRail = renderState(playing({ heroes: { elara: { health: 50, mana: 0, r
 assert.match(wornRail, /aria-label="Health: 22 of 44"/);
 assert.match(wornRail, /aria-label="Readiness: 40 of 100"/);
 assert.match(wornRail, /aria-label="Experience: 25 of 100"/);
+assert.match(wornRail, /class="mini-meter health"[^>]*>[\s\S]*?--meter-percent:50%/, 'Rail Health must render its actual percentage');
+assert.match(wornRail, /class="mini-meter ready"[^>]*>[\s\S]*?--meter-percent:40%/, 'Rail Readiness must render its actual percentage');
+assert.match(wornRail, /class="mini-meter xp"[^>]*>[\s\S]*?--meter-percent:25%/, 'Rail Experience must render its actual percentage');
 assert.match(styles, /rail-copy>em/,'Rail status styling must not override meter fills');
 
 const tavern = renderState(playing({ activeBuilding: 'tavern' }));
@@ -96,6 +100,9 @@ assert.match(roster, />Accuracy</);
 assert.match(roster, />Critical</);
 assert.match(roster, /Main hand/);
 assert.match(roster, />Traits</);
+assert.match(roster, /Combat moves/);
+assert.match(roster, /Measured Strike/);
+assert.match(roster, /Guarded Lunge/);
 assert.doesNotMatch(roster, /title=/, 'Help terms must not trigger duplicate native tooltips');
 
 const equipment = renderState(playing({
@@ -118,12 +125,13 @@ assert.match(preparation, /Sable Reed/);
 assert.match(preparation, /Serious outcome risk/);
 assert.match(preparation, /Expected wear/);
 assert.doesNotMatch(preparation, />ATK</);
-assert.match(preparation, /class="info-popover"/);
+assert.match(preparation, /class="tooltip-popover"/);
 assert.match(preparation, /Vanguard/);
 assert.match(preparation, /How should they proceed/);
 assert.match(preparation, />Careful</);
 assert.match(preparation, />Scavenge</);
 assert.match(preparation, /Favoured/);
+assert.doesNotMatch(preparation, /favoured-popover/, 'Favoured must use the shared tooltip implementation');
 
 const expeditionBoard = renderState(playing({ view: 'expeditions', firstExpeditionComplete: true, completedExpeditions: { 'briar-den': 1 } }));
 assert.match(expeditionBoard, /Abandoned Road/);

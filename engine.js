@@ -27,6 +27,44 @@
     Skirmisher: 'Melee · Physical. A light-armoured attacker who relies on Speed and Evasion rather than Armour.'
   };
 
+  // Class moves are data rather than combat-log flavour. Every move below has
+  // an unlock level and modifiers that are read directly by the simulator.
+  const MOVES = {
+    Vanguard: [
+      { key: 'measured-strike', name: 'Measured Strike', level: 1, power: 1, accuracy: 6, critical: 0, damageType: 'physical', description: 'A dependable attack with +6 hit chance.' },
+      { key: 'shield-bash', name: 'Shield Bash', level: 1, power: 0.85, accuracy: 11, critical: -2, damageType: 'physical', description: 'A lighter blow with +11 hit chance.' },
+      { key: 'guarded-lunge', name: 'Guarded Lunge', level: 2, power: 1.1, accuracy: 0, critical: 2, damageType: 'physical', description: 'A stronger thrust with +2 critical chance.' },
+      { key: 'sundering-blow', name: 'Sundering Blow', level: 3, power: 1.15, accuracy: -5, critical: 3, armourPiercing: 2, damageType: 'physical', description: 'A heavy attack that ignores 2 Armour, but has −5 hit chance.' },
+      { key: 'pommel-break', name: 'Pommel Break', level: 4, power: 1.05, accuracy: 8, critical: 0, damageType: 'physical', description: 'A controlled close-range blow with +8 hit chance.' },
+      { key: 'company-edge', name: 'Company’s Edge', level: 5, power: 1.3, accuracy: -8, critical: 6, damageType: 'physical', description: 'A punishing veteran strike with −8 hit chance and +6 critical chance.' }
+    ],
+    Ranger: [
+      { key: 'quick-shot', name: 'Quick Shot', level: 1, power: 0.9, accuracy: 9, critical: 0, damageType: 'physical', description: 'A swift arrow with +9 hit chance.' },
+      { key: 'barbed-arrow', name: 'Barbed Arrow', level: 1, power: 1, accuracy: 3, critical: 3, damageType: 'physical', description: 'A barbed shot with +3 hit and critical chance.' },
+      { key: 'deadeye-shot', name: 'Deadeye Shot', level: 2, power: 1.15, accuracy: -4, critical: 9, damageType: 'physical', description: 'A patient shot with −4 hit chance and +9 critical chance.' },
+      { key: 'bodkin-arrow', name: 'Bodkin Arrow', level: 3, power: 1.05, accuracy: 1, critical: 2, armourPiercing: 3, damageType: 'physical', description: 'A narrow arrowhead that ignores 3 Armour.' },
+      { key: 'hunters-aim', name: 'Hunter’s Aim', level: 4, power: 1.2, accuracy: 6, critical: 4, damageType: 'physical', description: 'A practised shot with +6 hit and +4 critical chance.' },
+      { key: 'heartseeker', name: 'Heartseeker', level: 5, power: 1.4, accuracy: -8, critical: 12, damageType: 'physical', description: 'A high-risk shot with −8 hit and +12 critical chance.' }
+    ],
+    Acolyte: [
+      { key: 'staff-strike', name: 'Staff Strike', level: 1, power: 0.65, accuracy: 4, critical: 0, manaCost: 0, damageType: 'physical', fallback: true, description: 'A modest physical attack used when conserving Mana or unable to cast.' },
+      { key: 'guiding-spark', name: 'Guiding Spark', level: 1, power: 0.95, accuracy: 9, critical: 0, manaCost: 7, damageType: 'magical', description: 'A reliable spell costing 7 Mana, with +9 hit chance.' },
+      { key: 'radiant-word', name: 'Radiant Word', level: 1, power: 1.05, accuracy: 1, critical: 2, manaCost: 8, damageType: 'magical', description: 'A balanced spell costing 8 Mana.' },
+      { key: 'searing-sign', name: 'Searing Sign', level: 2, power: 1.15, accuracy: -2, critical: 6, manaCost: 10, damageType: 'magical', description: 'A forceful sign costing 10 Mana, with +6 critical chance.' },
+      { key: 'warding-ray', name: 'Warding Ray', level: 3, power: 1.05, accuracy: 10, critical: 0, wardPiercing: 2, manaCost: 9, damageType: 'magical', description: 'A precise ray costing 9 Mana that ignores 2 Ward.' },
+      { key: 'sun-lance', name: 'Sun Lance', level: 4, power: 1.3, accuracy: -5, critical: 5, manaCost: 12, damageType: 'magical', description: 'A powerful spell costing 12 Mana, with −5 hit chance.' },
+      { key: 'judgement', name: 'Judgement', level: 5, power: 1.45, accuracy: -8, critical: 10, manaCost: 14, damageType: 'magical', description: 'A costly finishing spell with +10 critical chance.' }
+    ],
+    Skirmisher: [
+      { key: 'feinting-slash', name: 'Feinting Slash', level: 1, power: 0.9, accuracy: 10, critical: 2, damageType: 'physical', description: 'A deceptive cut with +10 hit and +2 critical chance.' },
+      { key: 'low-sweep', name: 'Low Sweep', level: 1, power: 1, accuracy: 5, critical: 0, damageType: 'physical', description: 'A low, controlled attack with +5 hit chance.' },
+      { key: 'passing-cut', name: 'Passing Cut', level: 2, power: 1.1, accuracy: 0, critical: 5, damageType: 'physical', description: 'A mobile attack with +5 critical chance.' },
+      { key: 'gapfinder', name: 'Gapfinder', level: 3, power: 1.05, accuracy: 4, critical: 3, armourPiercing: 3, damageType: 'physical', description: 'A precise cut that ignores 3 Armour.' },
+      { key: 'reversal', name: 'Reversal', level: 4, power: 1.2, accuracy: -3, critical: 8, damageType: 'physical', description: 'A risky counterattack with +8 critical chance.' },
+      { key: 'vanishing-point', name: 'Vanishing Point', level: 5, power: 1.35, accuracy: -5, critical: 12, damageType: 'physical', description: 'A veteran finishing move with +12 critical chance.' }
+    ]
+  };
+
   const APPROACHES = {
     careful: { name: 'Careful', duration: 1.35, enemyAttack: 0.9, reward: 0.9, materials: 1, readiness: 0.75, description: 'Longer, with lower Readiness use and less avoidable danger.' },
     standard: { name: 'Standard', duration: 1, enemyAttack: 1, reward: 1, materials: 1, readiness: 1, description: 'Baseline duration, rewards and risk.' },
@@ -138,6 +176,23 @@
     return hasTrait(key, 'Studious') ? Math.ceil(baseExperience * 1.25) : baseExperience;
   }
 
+  function levelFromExperience(experience) {
+    return Math.floor(Math.max(0, Number(experience) || 0) / 100) + 1;
+  }
+
+  function movesForRole(role, level, includeLocked) {
+    const currentLevel = Math.max(1, Number(level) || 1);
+    const moves = MOVES[role] || [];
+    return includeLocked ? moves.slice() : moves.filter(move => move.level <= currentLevel);
+  }
+
+  function chooseMove(actor, rng) {
+    const unlocked = movesForRole(actor.role, actor.level).filter(move => !move.fallback && (move.manaCost || 0) <= actor.mana);
+    if (unlocked.length) return pick(unlocked, rng);
+    const fallback = movesForRole(actor.role, actor.level).find(move => move.fallback);
+    return fallback || { name: 'Basic Attack', power: 1, accuracy: 0, critical: 0, manaCost: 0, damageType: actor.magical ? 'magical' : 'physical' };
+  }
+
   function simulateBattle(options) {
     const party = (options.party || []).filter(key => HEROES[key]);
     if (!party.length) return { success: false, invalid: true, log: [], heroes: {}, rounds: 0, potionUsed: false };
@@ -154,10 +209,11 @@
       const healthPercent = clamp(condition.health === undefined ? 100 : condition.health, 1, 100);
       const mana = clamp(condition.mana === undefined ? HEROES[key].maxMana : condition.mana, 0, HEROES[key].maxMana);
       const readiness = clamp(condition.readiness === undefined ? 100 : condition.readiness, 0, 100);
+      const level = levelFromExperience(condition.xp);
       const stats = effectiveStats(key, { readiness, swordEquipped: sword, weaponBonus: equipmentAttack[key] });
       const hp = Math.max(1, Math.round(HEROES[key].maxHealth * healthPercent / 100));
       return {
-        key, side: 'hero', name: HEROES[key].name, hp, startingHp: hp,
+        key, side: 'hero', name: HEROES[key].name, role: HEROES[key].role, level, hp, startingHp: hp,
         startingHealthPercent: Math.round(healthPercent), maxHp: HEROES[key].maxHealth,
         attack: stats.attack, armour: stats.armour, ward: stats.ward, speed: stats.speed,
         accuracy: stats.accuracy, evasion: stats.evasion, critical: stats.critical,
@@ -186,34 +242,23 @@
           const targets = enemyUnits.filter(unit => unit.hp > 0);
           if (!targets.length) break;
           const target = pick(targets, rng);
-          const hitChance = clamp((actor.accuracy - (target.evasion || 0)) / 100, 0.35, 0.97);
+          const move = chooseMove(actor, rng);
+          actor.mana -= move.manaCost || 0;
+          const hitChance = clamp((actor.accuracy + (move.accuracy || 0) - (target.evasion || 0)) / 100, 0.35, 0.97);
           if (rng() > hitChance) {
-            write(actor.name + ' attacks ' + target.name + ' but misses.');
+            write(actor.name + ' uses ' + move.name + ', but misses ' + target.name + '.');
             continue;
           }
-          const critical = rng() < actor.critical / 100;
+          const critical = rng() < clamp((actor.critical + (move.critical || 0)) / 100, 0, 0.75);
           const variance = Math.floor(rng() * 4) - 1;
-          let magical = actor.magical;
-          let attack = actor.attack;
-          let skill;
-          if (actor.key === 'orin' && actor.mana >= 7) {
-            actor.mana -= 7;
-            skill = pick(['Guiding Spark', 'Radiant Word', 'Searing Sign'], rng);
-          } else if (actor.key === 'orin') {
-            magical = false;
-            attack = Math.max(1, Math.round(4 * actor.readinessModifier));
-            skill = 'Staff Strike';
-          } else if (actor.key === 'elara') {
-            skill = pick(['Shield Bash', 'Measured Strike', 'Guarded Lunge'], rng);
-          } else if (actor.key === 'sable') {
-            skill = pick(['Feinting Slash', 'Low Sweep', 'Passing Cut'], rng);
-          } else {
-            skill = pick(['Quick Shot', 'Barbed Arrow', 'Deadeye Shot'], rng);
-          }
-          const base = attack + variance + (critical ? Math.ceil(attack * 0.7) : 0);
-          const damage = Math.max(1, base - (magical ? (target.ward || 0) : target.armour));
+          const magical = move.damageType === 'magical';
+          const attack = move.fallback ? Math.max(1, Math.round(4 * actor.readinessModifier)) : actor.attack;
+          const poweredAttack = Math.max(1, Math.round(attack * (move.power || 1)));
+          const base = poweredAttack + variance + (critical ? Math.ceil(poweredAttack * 0.7) : 0);
+          const defence = magical ? Math.max(0, (target.ward || 0) - (move.wardPiercing || 0)) : Math.max(0, (target.armour || 0) - (move.armourPiercing || 0));
+          const damage = Math.max(1, base - defence);
           target.hp = Math.max(0, target.hp - damage);
-          write(actor.name + ' uses ' + skill + '. ' + target.name + ' takes ' + damage + (magical ? ' magical' : '') + ' damage' + (critical ? ' — critical hit.' : '.'));
+          write(actor.name + ' uses ' + move.name + '. ' + target.name + ' takes ' + damage + (magical ? ' magical' : '') + ' damage' + (critical ? ' — critical hit.' : '.'));
           if (target.hp === 0) write(target.name + ' falls.');
         } else {
           let targets = heroUnits.filter(unit => unit.hp > 0);
@@ -331,7 +376,7 @@
   }
 
   return {
-    HEROES, TRAITS, ROLES, ENEMIES, ENCOUNTERS, APPROACHES, hashSeed, randomFrom, readinessModifier,
-    effectiveStats, experienceGain, simulateBattle, forecast, encounterSeed, heroAdvantages, hasTrait
+    HEROES, TRAITS, ROLES, MOVES, ENEMIES, ENCOUNTERS, APPROACHES, hashSeed, randomFrom, readinessModifier,
+    effectiveStats, experienceGain, levelFromExperience, movesForRole, simulateBattle, forecast, encounterSeed, heroAdvantages, hasTrait
   };
 });

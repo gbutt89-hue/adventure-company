@@ -34,6 +34,8 @@ The current slice covers:
 - Careful, Standard, Aggressive and Scavenge expedition approaches
 - encounter-specific Favoured indicators with exact explanations
 - live Health, Mana, Readiness and XP meters in the hero rail
+- data-driven class moves with level-one choices and new unlocks through level five
+- character-sheet move progression with real Mana, accuracy, critical and defence-piercing effects
 
 The game is deliberately data-led and low-animation. The current goal is to validate the Town, expedition, recovery and equipment loop before adding recruitment, affixes, prestige or monetisation.
 

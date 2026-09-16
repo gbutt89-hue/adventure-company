@@ -334,8 +334,12 @@
     });
   }
 
+  function tooltip(label, description, trigger, modifier, focusable) {
+    return '<span class="tooltip-wrap ' + (modifier || '') + '"><span class="tooltip-trigger" ' + (focusable ? 'tabindex="0" ' : '') + 'aria-label="' + esc(label + ': ' + description) + '">' + trigger + '</span><span class="tooltip-popover" role="tooltip"><strong>' + esc(label) + '</strong><span>' + esc(description) + '</span></span></span>';
+  }
+
   function infoTerm(label, description) {
-    return '<span class="info-wrap"><button type="button" class="info-term" aria-label="' + esc(label + ': ' + description) + '">' + esc(label) + '</button><span class="info-popover" role="tooltip"><strong>' + esc(label) + '</strong><span>' + esc(description) + '</span></span></span>';
+    return tooltip(label, description, esc(label), 'info-wrap', true);
   }
 
   function heroLevel(condition) { return Math.floor((condition.xp || 0) / 100) + 1; }
@@ -350,7 +354,7 @@
   function miniMeter(label, value, maximum, kind, symbol) {
     var max = maximum || 100;
     var width = max ? Math.max(0, Math.min(100, value / max * 100)) : 0;
-    return '<span class="mini-meter ' + kind + '" role="meter" data-meter-value="' + esc(label + ': ' + value + ' / ' + max) + '" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i><em style="width:' + width + '%"></em></i></span>';
+    return '<span class="mini-meter ' + kind + '" role="meter" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i style="--meter-percent:' + width + '%"></i></span>';
   }
 
   function conditionMeters(key, compact) {
@@ -370,7 +374,7 @@
   function favouredBadge(key) {
     var reasons = E.heroAdvantages(key, state.selectedExpedition);
     if (!reasons.length) return '';
-    return '<span class="favoured-badge" tabindex="0" aria-label="Favoured: ' + esc(reasons.join(' ')) + '"><b>↑</b> Favoured<span class="favoured-popover" role="tooltip">' + esc(reasons.join(' ')) + '</span></span>';
+    return tooltip('Favoured', reasons.join(' '), '<b aria-hidden="true">↑</b> Favoured', 'favoured-badge', false);
   }
 
   function heroIdentity(key, plain) {
@@ -569,6 +573,17 @@
     return '<' + tag + ' class="inventory-item-card' + selected + '"' + action + '><span class="item-icon">⚔</span><span class="item-card-copy"><span class="label">' + (item.rarity || 'Common') + ' ' + SLOT_LABELS[item.slot].toLowerCase() + ' weapon</span><strong>' + item.name + '</strong><span>Attack +' + item.attack + ' · ' + itemRoles(item) + '</span></span></' + tag + '>';
   }
 
+  function moveProgression(key) {
+    var hero = E.HEROES[key], level = heroLevel(state.heroes[key]);
+    var moves = E.movesForRole(hero.role, level, true).map(function (move) {
+      var unlocked = move.level <= level;
+      var resource = move.manaCost ? move.manaCost + ' Mana' : 'No Mana';
+      var type = move.damageType === 'magical' ? 'Magical' : 'Physical';
+      return '<article class="move-card ' + (unlocked ? 'unlocked' : 'locked') + '"><header><strong>' + esc(move.name) + '</strong><span>' + (move.fallback ? 'Fallback' : unlocked ? 'Available' : 'Level ' + move.level) + '</span></header><p>' + esc(move.description) + '</p><small>' + type + ' · ' + resource + '</small></article>';
+    }).join('');
+    return '<section class="move-progression"><div class="section-heading"><div><span class="label">Combat moves</span><h2>' + esc(hero.role) + ' progression</h2></div><span>Level ' + level + '</span></div><p class="move-intro">The simulator chooses among available moves. Locked moves enter that pool when the hero reaches their listed level.</p><div class="move-grid">' + moves + '</div></section>';
+  }
+
   function characterSheet(key) {
     var hero = E.HEROES[key], ui = HERO_UI[key], condition = state.heroes[key], stats = effectiveHeroStats(key);
     var healthNow = Math.max(1, Math.round(hero.maxHealth * condition.health / 100));
@@ -576,7 +591,7 @@
     return '<section class="character-sheet"><header><span class="portrait large ' + ui.colour + '">' + ui.initials + '</span>' + heroIdentity(key, false) + '<div class="combat-identity"><span>' + hero.combatStyle + '</span><span>' + (hero.damageType === 'magical' ? 'Magical damage' : 'Physical damage') + '</span></div></header><div class="character-overview"><section class="sheet-condition"><span class="label">Condition</span>' + meter('Health', healthNow, 'health', hero.maxHealth, healthNow + '/' + hero.maxHealth) + (hero.maxMana ? meter('Mana', condition.mana, 'mana', hero.maxMana, condition.mana + '/' + hero.maxMana) : '') + meter('Readiness', condition.readiness, 'ready') + '<div class="xp-block"><div><span>Level ' + heroLevel(condition) + '</span><strong>' + xpWithinLevel(condition) + '/100 XP</strong></div><span class="meter xp" role="meter" aria-label="Experience towards next level" aria-valuenow="' + xpWithinLevel(condition) + '" aria-valuemin="0" aria-valuemax="100"><i style="width:' + xpWithinLevel(condition) + '%"></i></span></div></section><section class="sheet-stat-groups"><div class="stat-group"><span class="label">Offence</span><div class="full-stats"><span>' + infoTerm('Attack', STAT_INFO.attack) + '<b>' + stats.attack + '</b></span><span>' + infoTerm('Accuracy', STAT_INFO.accuracy) + '<b>' + stats.accuracy + '%</b></span><span>' + infoTerm('Critical', STAT_INFO.critical) + '<b>' + stats.critical + '%</b></span></div></div><div class="stat-group"><span class="label">Defence</span><div class="full-stats"><span>' + infoTerm('Armour', STAT_INFO.armour) + '<b>' + stats.armour + '</b></span><span>' + infoTerm('Ward', STAT_INFO.ward) + '<b>' + stats.ward + '</b></span><span>' + infoTerm('Evasion', STAT_INFO.evasion) + '<b>' + stats.evasion + '%</b></span></div></div><div class="stat-group tempo-group"><span class="label">Tempo</span><div class="full-stats"><span>' + infoTerm('Speed', STAT_INFO.speed) + '<b>' + stats.speed + '</b></span></div></div><div class="resistance-row"><span class="label">Resistances</span><span>' + infoTerm('Fire', STAT_INFO.fire) + '<b>' + hero.resistances.fire + '%</b></span></div></section></div><div class="sheet-lower"><section><span class="label">Equipment</span><div class="equipment-grid">' + Object.keys(SLOT_LABELS).map(function (slot) {
       var item = equippedItem(key, slot);
       return '<button class="equipment-slot ' + (item ? 'filled ' : '') + '" data-action="open-equipment-slot" data-slot="' + slot + '" data-hero="' + key + '"' + (slot === 'mainHand' ? ' data-tutorial-target="main-hand-slot"' : '') + '><span>' + SLOT_LABELS[slot] + '</span><strong>' + (item ? item.name : 'Empty') + '</strong>' + (item ? '<em>Attack +' + item.attack + '</em>' : '<em>Choose item</em>') + '</button>';
-    }).join('') + '</div></section><section class="trait-list"><span class="label">Traits</span>' + traits + '</section></div></section>';
+    }).join('') + '</div></section><section class="trait-list"><span class="label">Traits</span>' + traits + '</section></div>' + moveProgression(key) + '</section>';
   }
 
   function roster() {
@@ -681,6 +696,34 @@
     bind(); applyTutorialSpotlight();
   }
 
+  function bindTooltips() {
+    document.querySelectorAll('.tooltip-wrap').forEach(function (wrapper) {
+      var popover = wrapper.querySelector('.tooltip-popover');
+      var trigger = wrapper.querySelector('.tooltip-trigger');
+      if (!popover || !trigger) return;
+      function openTooltip() {
+        wrapper.classList.add('tooltip-open');
+        popover.style.left = '0px';
+        popover.style.top = '0px';
+        var triggerRect = trigger.getBoundingClientRect();
+        var popoverRect = popover.getBoundingClientRect();
+        var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        var viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+        var gutter = 8;
+        var left = Math.max(gutter, Math.min(triggerRect.left, viewportWidth - popoverRect.width - gutter));
+        var top = triggerRect.bottom + gutter;
+        if (top + popoverRect.height > viewportHeight - gutter) top = Math.max(gutter, triggerRect.top - popoverRect.height - gutter);
+        popover.style.left = Math.round(left) + 'px';
+        popover.style.top = Math.round(top) + 'px';
+      }
+      function closeTooltip() { wrapper.classList.remove('tooltip-open'); }
+      wrapper.addEventListener('pointerenter', openTooltip);
+      wrapper.addEventListener('pointerleave', closeTooltip);
+      wrapper.addEventListener('focusin', openTooltip);
+      wrapper.addEventListener('focusout', function (event) { if (!wrapper.contains(event.relatedTarget)) closeTooltip(); });
+    });
+  }
+
   function bind() {
     document.querySelectorAll('[data-view]').forEach(function (button) { button.addEventListener('click', function () { if (tutorialAllows(button)) openView(button.dataset.view); }); });
     document.querySelectorAll('[data-building]').forEach(function (button) { button.addEventListener('click', function () { if (tutorialAllows(button)) openBuilding(button.dataset.building); }); });
@@ -698,6 +741,7 @@
     if (form) form.addEventListener('submit', function (event) { event.preventDefault(); var name = document.getElementById('company-name').value.trim(); if (name) set({ companyName: name, stage: 'playing', view: 'town' }); });
     var importer = document.getElementById('import-save');
     if (importer) importer.addEventListener('change', importSave);
+    bindTooltips();
   }
 
   function openView(view) {
