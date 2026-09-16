@@ -4,7 +4,7 @@ Read this first for implementation work. Treat the code as authoritative if this
 
 ## Current product
 
-- **Prototype:** 0.7.2, save schema 8, pending deployment as a static installable PWA on GitHub Pages.
+- **Prototype:** 0.7.2, save schema 8, deployed from `main` as a static installable PWA on GitHub Pages.
 - **Premise:** manage a persistent fantasy adventuring company. Prepare one to three heroes, equipment, approach and supplies; send them on autonomous timed expeditions; review the seeded combat account; then recover, craft and improve the company.
 - **Product direction:** fun-first, low-animation and system-led, with modest development scope. Avoid exploitative gacha and intrusive advertising. The current slice validates the Town, expedition, recovery, equipment and supply loop.
 
@@ -25,7 +25,7 @@ build.mjs -> dist/ -> GitHub Pages
 - No framework, server or account system. State is local to the browser and may be exported/imported as JSON.
 - `game.js` uses `window.AdventureEngine`; `engine.js` is also CommonJS-compatible for Node tests.
 - Activities store absolute end times, so expeditions, crafting and recovery resolve after the game is closed.
-- `npm test` performs syntax, engine and rendered-interface smoke checks; `npm run build` packages the static PWA.
+- `npm test` performs syntax, deterministic engine and VM-rendered interface smoke checks; `npm run build` packages the static PWA. There is no framework, dependency install step, linter or type checker.
 
 ## Implemented systems
 
@@ -67,9 +67,10 @@ build.mjs -> dist/ -> GitHub Pages
 - **Facilities/company growth:** no upgrades, slot expansion, jobs, research, scouting, shop, Temple service or Guild Hall function.
 - **Conditions:** Injury is currently a single boolean; diseases, curses and richer injuries/quirks are deferred.
 - **Expedition utility gear:** reward-modifier plumbing exists, but no loot-improving item is currently obtainable.
-- **Balance/content:** the three encounters and four classes are test content, not final tuning. A formal progression/economy balance pass remains necessary.
+- **Balance/content:** the four encounters and four classes are test content, not final tuning. A formal progression/economy balance pass remains necessary.
 - **Tutorial concessions:** the first Abandoned Road run and first sword craft are five seconds; the first successful expedition guarantees at least three Iron Ore. Normal timings then apply.
-- **Persistence:** saves are browser-local. Clearing site data removes progress unless the save was exported.
+- **Persistence:** saves are browser-local. Clearing site data removes progress unless the save was exported. Schema 8 still uses the established `adventure-company-prototype-v4` storage key and reads v1–v3 legacy keys; do not rename or remove these without an explicit migration.
+- **Code/test shape:** `game.js` is currently a single UI/state module, and `test-ui.js` is a VM/string-based smoke suite rather than browser automation. Keep changes targeted; UI, timer, service-worker and install behaviour still need relevant manual playtesting.
 
 ## Key files
 
@@ -84,9 +85,10 @@ build.mjs -> dist/ -> GitHub Pages
 | Packaging/deployment | `build.mjs`, `.github/workflows/check.yml`, `.github/workflows/pages.yml` |
 | Regression checks | `test-engine.js`, `test-ui.js` |
 | Player/developer overview | `README.md` |
+| Agent workflow and repository conventions | `AGENTS.md` |
 
 ## Immediate development state
 
-- 0.7.2 closes the all-Injured/no-Gold softlock, adds the normal-system Forage recovery route, expands base crafting content and finishes the opening tutorial hand-off.
+- `main` is the canonical deployed branch. Prototype 0.7.2 closes the all-Injured/no-Gold softlock, adds the normal-system Forage recovery route, expands base crafting content and finishes the opening tutorial hand-off.
 - Next, validate Emergency Treatment gating, Forage risk/yield, tutorial clarity, loot-slot outcomes and early Gold/material pressure. Fix concrete defects before broadening scope.
 - Once this loop is stable, the next agreed major system is **recruitment and roster growth**, followed by prestige/progression bands and deeper item/crafting generation. Do not start these as incidental refactors.
