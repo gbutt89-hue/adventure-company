@@ -78,6 +78,9 @@ assert.match(wornRail, /aria-label="Experience: 25 of 100"/);
 assert.match(wornRail, /class="mini-meter health"[^>]*>[\s\S]*?--meter-percent:50%/, 'Rail Health must render its actual percentage');
 assert.match(wornRail, /class="mini-meter ready"[^>]*>[\s\S]*?--meter-percent:40%/, 'Rail Readiness must render its actual percentage');
 assert.match(wornRail, /class="mini-meter xp"[^>]*>[\s\S]*?--meter-percent:25%/, 'Rail Experience must render its actual percentage');
+assert.match(wornRail, /class="tooltip-wrap meter-tooltip"[\s\S]*?<strong>Health<\/strong><span>22 \/ 44<\/span>/, 'Rail meters must expose current and maximum values through the shared tooltip');
+assert.match(styles, /\.meter\.health i,\.result-meter\.health \.after/, 'Large meter colours must be scoped so they cannot overwrite rail gradients');
+assert.doesNotMatch(styles, /\}\.health i,\.result-meter\.health/, 'Unscoped condition colours must not make every rail bar appear full');
 assert.match(styles, /rail-copy>em/,'Rail status styling must not override meter fills');
 
 const tavern = renderState(playing({ activeBuilding: 'tavern' }));

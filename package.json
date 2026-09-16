@@ -1,6 +1,6 @@
 {
   "name": "adventure-company",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "Seeded fantasy expedition company browser prototype",
   "scripts": {

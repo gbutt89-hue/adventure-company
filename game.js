@@ -354,7 +354,8 @@
   function miniMeter(label, value, maximum, kind, symbol) {
     var max = maximum || 100;
     var width = max ? Math.max(0, Math.min(100, value / max * 100)) : 0;
-    return '<span class="mini-meter ' + kind + '" role="meter" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i style="--meter-percent:' + width + '%"></i></span>';
+    var bar = '<span class="mini-meter ' + kind + '" role="meter" aria-label="' + esc(label + ': ' + value + ' of ' + max) + '" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '"><b aria-hidden="true">' + symbol + '</b><i style="--meter-percent:' + width + '%"></i></span>';
+    return tooltip(label, value + ' / ' + max, bar, 'meter-tooltip', false);
   }
 
   function conditionMeters(key, compact) {
